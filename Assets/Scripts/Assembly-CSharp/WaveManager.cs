@@ -316,14 +316,28 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 						break;
 					}
 					SeededRandomizer randomizer = new SeededRandomizer(num);
+					int endlessWaveCount = DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), selectedModeData.endlessWaves);
+					int endlessBossWaveCount = DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), selectedModeData.endlessBonusWaves);
+
+					// Kaizen currently ships without the endless tables referenced by
+					// PlayModeSchema. Do not modulo by zero: fall back to the nearest
+					// authored story wave until those tables are supplied.
+					if (selectedModeData.bonusWaveInterval <= 0 || endlessWaveCount <= 0 ||
+						(num % selectedModeData.bonusWaveInterval == 0 && endlessBossWaveCount <= 0))
+					{
+						Debug.LogError("Endless wave data is missing or invalid for play mode '" + selectedModeData.id + "'. Falling back to the previous authored wave.");
+						num--;
+						continue;
+					}
+
 					if (num % selectedModeData.bonusWaveInterval == 0)
 					{
-						int num2 = num / selectedModeData.bonusWaveInterval % DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), selectedModeData.endlessBonusWaves) + 1;
+						int num2 = num / selectedModeData.bonusWaveInterval % endlessBossWaveCount + 1;
 						waveSchema = WaveSchema.Initialize(DataBundleRuntime.TableRecordKey(selectedModeData.endlessBonusWaves.RecordTable, num2.ToString()), randomizer);
 					}
 					else
 					{
-						int num3 = (num - 1) % DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), selectedModeData.endlessWaves) + 1;
+						int num3 = (num - 1) % endlessWaveCount + 1;
 						waveSchema = WaveSchema.Initialize(DataBundleRuntime.TableRecordKey(selectedModeData.endlessWaves.RecordTable, num3.ToString()), randomizer);
 					}
 					break;
