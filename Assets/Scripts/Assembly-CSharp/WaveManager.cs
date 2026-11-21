@@ -208,13 +208,25 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public void MoveGate(int index)
 	{
+		if (mEnemyGateGroup == null || mEnemyGateZPositions == null || mEnemyGateZPositions.Count == 0)
+		{
+			Debug.LogWarning("Cannot move the enemy gate: this stage has no configured RGatePosition markers.");
+			return;
+		}
+
+		int safeIndex = Mathf.Clamp(index, 0, mEnemyGateZPositions.Count - 1);
+		if (safeIndex != index)
+		{
+			Debug.LogWarning("Enemy gate position " + index + " is not configured in this stage. Using position " + safeIndex + " instead.");
+		}
+
 		mEnemyGateGroup.transform.position = new Vector3(
 			mEnemyGateGroup.transform.position.x,
 			mEnemyGateGroup.transform.position.y,
-			mEnemyGateZPositions[index]
+			mEnemyGateZPositions[safeIndex]
 		);
 
-		rightConstraint = mEnemyGateZPositions[index];
+		rightConstraint = mEnemyGateZPositions[safeIndex];
 	}
 
 	public static string SpecialBossName(int level)
