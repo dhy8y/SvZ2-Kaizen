@@ -180,6 +180,17 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 		LoadData();
 
+		if (Singleton<Profile>.Instance.MultiplayerData.IsMultiplayerGameSessionActive())
+		{
+			int level = Singleton<Profile>.Instance.MultiplayerData.MultiplayerGameSessionData.defensiveBuffs[0];
+			string text = SpecialBossName(level);
+			if (text != string.Empty)
+			{
+				Singleton<EnemiesDatabase>.Instance.LoadInGameData(text);
+				specialBossName = text;
+			}
+		}
+
 		AnalyseWaveCommandsForStats();
 
 		if (mEnemyGateGroup != null)
@@ -188,17 +199,6 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		}
 		mNextCommandIndex = 0;
 		mEnemiesKilledSoFar = 0;
-
-		if (Singleton<Profile>.Instance.MultiplayerData.IsMultiplayerGameSessionActive())
-		{
-			int level = Singleton<Profile>.Instance.MultiplayerData.MultiplayerGameSessionData.defensiveBuffs[0];
-			string text = SpecialBossName(level);
-			if (text != string.Empty)
-			{
-				Singleton<EnemiesDatabase>.Instance.LoadInGameData(text);
-				allDifferentEnemies.Add(text);
-			}
-		}
 
 		if (helperEnemySwaps.Length > 0)
 		{
@@ -392,6 +392,10 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		Singleton<PlayStatistics>.Instance.data.shouldAwardMysteryBox = waveRootData.awardMysteryBox;
 		GetHelperSwapData();
 		mTutorial = waveRootData.tutorial;
+		if (!DataBundleRecordKey.IsNullOrEmpty(waveRootData.BossEnemy))
+		{
+			specialBossName = waveRootData.BossEnemy.Key;
+		}
 		mVillageArchersLevel = waveRootData.villageArchers;
 		mBellLevel = waveRootData.bell;
 		LoadLevelMultipliers();
@@ -470,6 +474,23 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		if (isWaveComplete) return;
 
 		mWaveSpawnManager.Update();
+
+		// Bosses are held until every regular spawn queue has finished.
+		if (areCommandsDone && !mWaveSpawnManager.IsSpawning && !string.IsNullOrEmpty(specialBossName))
+		{
+			Enemy boss = ConstructEnemy(specialBossName);
+			if (boss != null)
+			{
+				WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(boss);
+				FlashBanner("Boss");
+			}
+			else
+			{
+				Debug.LogError("Unable to spawn wave boss '" + specialBossName + "'. Check the EnemySchema entry and resources.");
+				mTotalNumEnemies--;
+			}
+			specialBossName = string.Empty;
+		}
 
 		if (mNextCommand == null) return;
 
@@ -600,12 +621,17 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	private void AnalyseWaveCommandsForStats()
 	{
-		var multiplayerData = Singleton<Profile>.Instance.MultiplayerData;
-		mTotalNumEnemies = (multiplayerData.IsMultiplayerGameSessionActive() && multiplayerData.MultiplayerGameSessionData.defensiveBuffs[0] > 0)
-			? 1
-			: 0;
-		
+		mTotalNumEnemies = 0;
 		mAllDifferentEnemies.Clear();
+
+		if (!string.IsNullOrEmpty(specialBossName))
+		{
+			mTotalNumEnemies++;
+			if (Singleton<EnemiesDatabase>.Instance.Contains(specialBossName))
+			{
+				mAllDifferentEnemies.Add(specialBossName);
+			}
+		}
 
 		for (int i = 0; i < waveRootData.Commands.Length; i++)
 		{
