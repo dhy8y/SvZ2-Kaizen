@@ -27,7 +27,6 @@ jobs:
           targetPlatform: Android
           unityVersion: 2022.3.62f1
           buildMethod: KaizenAndroidBuild.BuildAndroid
-          androidAppBundle: false
           allowDirtyBuild: true
 
       - name: Upload APK
