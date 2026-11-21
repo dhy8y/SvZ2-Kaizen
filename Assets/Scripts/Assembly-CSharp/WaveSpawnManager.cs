@@ -100,7 +100,17 @@ public class WaveSpawnManager
             if (queueItem.enemy != string.Empty)
             {
                 var enemy = waveManager.ConstructEnemy(queueItem.enemy);
-                WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(enemy);
+                if (enemy != null)
+                {
+                    WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(enemy);
+                }
+                else
+                {
+                    // Keep the wave completable if a data bundle references a missing
+                    // enemy or its prefab cannot be constructed.
+                    waveManager.totalEnemies = Mathf.Max(0, waveManager.totalEnemies - 1);
+                    Debug.LogError("Unable to spawn enemy '" + queueItem.enemy + "'. Check EnemySchema and character resources.");
+                }
             }
 
             spawnQueue.timer.Set(queueItem.delay);
