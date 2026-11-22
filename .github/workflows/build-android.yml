@@ -16,7 +16,20 @@ jobs:
         with:
           lfs: true
 
+      - name: Check Unity license secret
+        id: license
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        run: |
+          if [ -n "$UNITY_LICENSE" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android build skipped: configure the legitimate UNITY_LICENSE repository secret to enable it."
+          fi
+
       - name: Build with Unity
+        if: steps.license.outputs.available == 'true'
         uses: game-ci/unity-builder@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -30,6 +43,7 @@ jobs:
           allowDirtyBuild: true
 
       - name: Upload APK
+        if: steps.license.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: SvZ2-Kaizen-Android-APK
