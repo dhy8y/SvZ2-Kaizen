@@ -75,9 +75,11 @@ waves = records(wave_sections.get("Waves", ""))
 commands = {name: section for name, section in command_sections.items()}
 enemies = {rec.get("id", key) for key, rec in records(enemy_sections.get("Enemies", "")).items()}
 heroes = {rec.get("id", key) for key, rec in records(hero_sections.get("Heroes", "")).items()}
-reward_records = set(records(reward_sections.get("Reward_Table", "")))
+reward_defs = records(reward_sections.get("Reward_Table", ""))
+reward_records = set(reward_defs)
 play_modes = records(playmode_sections.get("PlayModes", ""))
 procedural_records = records(procedural_sections.get("DailyChallenges", ""))
+
 
 scene_names = {p.stem for p in (ROOT / "Assets" / "Scenes").rglob("*.unity")}
 wave_refs = []
@@ -142,8 +144,27 @@ for challenge, fields in procedural_records.items():
         if table not in wave_sections:
             warn(f"Daily challenge '{challenge}' points to missing wave table '{table}'.")
 
+# WaveRewardSchema has data, but the current story records do not assign any rewards.
+assigned_reward_ids = set()
+for wave in waves.values():
+    reward = wave.get("rewards", "")
+    if reward.startswith("Reward_Table."):
+        assigned_reward_ids.add(reward.split(".", 1)[1])
+unused_rewards = sorted(reward_records - assigned_reward_ids)
+if unused_rewards:
+    warn(f"{len(unused_rewards)} WaveRewardSchema records are not assigned to any current story wave.")
+unsupported_reward_fields = {"souls", "revive", "power", "luck", "friendship", "wealth", "haste", "peace", "tea", "sushi"}
+unsupported_reward_values = sorted({
+    field for definition in reward_defs.values()
+    for field in unsupported_reward_fields
+    if definition.get(field, "0").strip() not in ("", "0", "False", "NULL")
+})
+if unsupported_reward_values:
+    warn("Reward data contains values outside the currently processed coins/pachinkoBalls: " +
+         ", ".join(unsupported_reward_values) + " (reward collection/banking code is unfinished).")
+
 # EnemyGroupSchema retains legacy records. Only report missing IDs, do not fail the story check.
-group_enemy_refs = re.findall(r"enemy_\d+\s*=\s*Enemies\.([A-Za-z0-9_]+)", group_sections.get("DC_Group_Heavy_Legion", "") + "\n" + "\n".join(group_sections.values()))
+group_enemy_refs = re.findall(r"enemy_\\d+\\s*=\\s*Enemies\\.([A-Za-z0-9_]+)", "\\n".join(group_sections.values()))
 missing_group_enemies = sorted(set(group_enemy_refs) - enemies)
 if missing_group_enemies:
     warn(f"Legacy enemy groups reference {len(missing_group_enemies)} enemy IDs absent from EnemySchema: " +
