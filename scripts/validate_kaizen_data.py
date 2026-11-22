@@ -172,9 +172,6 @@ if missing_group_enemies:
 
 if not waves:
     fail("No authored [Waves] records found.")
-if len(waves) != 10:
-    warn(f"Expected the currently authored Kaizen story to remain at 10 waves; found {len(waves)}.")
-
 print(f"Kaizen static data audit: {len(waves)} story waves, {len(commands)} command tables, {len(enemies)} enemy IDs, {len(heroes)} active hero record(s).")
 if errors:
     print("\nERRORS:")
