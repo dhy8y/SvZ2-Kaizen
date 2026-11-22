@@ -550,13 +550,19 @@ public class InGameImpl : WeakGlobalMonoBehavior<InGameImpl>
 	{
 		if (!ProfileData.IsInVSMultiplayerWave)
 		{
-			for (int i = 1; true; i++)
+			if (enemyGatePositions == null)
 			{
-				// [TODO] Implement in every stage
-				string childName = string.Format("RGatePosition{0}", i);
-				GameObject child = enemyGatePositions.FindChild(childName);
-				if (child == null) break;
-				enemyGateZPositions.Add(child.transform.position.z);
+				Debug.LogWarning("Enemy gate position container is not assigned in this stage. Wave gate movement will be disabled.");
+			}
+			else
+			{
+				for (int i = 1; true; i++)
+				{
+					string childName = string.Format("RGatePosition{0}", i);
+					GameObject child = enemyGatePositions.FindChild(childName);
+					if (child == null) break;
+					enemyGateZPositions.Add(child.transform.position.z);
+				}
 			}
 
 			mWaveManager = new WaveManager(
