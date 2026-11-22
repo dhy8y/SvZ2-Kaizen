@@ -1,0 +1,23 @@
+name: Kaizen data validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chatgpt/unity-2022-migration
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate authored waves and references
+        run: python scripts/validate_kaizen_data.py
