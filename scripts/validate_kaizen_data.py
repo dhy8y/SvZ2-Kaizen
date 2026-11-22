@@ -164,7 +164,7 @@ if unsupported_reward_values:
          ", ".join(unsupported_reward_values) + " (reward collection/banking code is unfinished).")
 
 # EnemyGroupSchema retains legacy records. Only report missing IDs, do not fail the story check.
-group_enemy_refs = re.findall(r"enemy_\\d+\\s*=\\s*Enemies\\.([A-Za-z0-9_]+)", "\\n".join(group_sections.values()))
+group_enemy_refs = re.findall(r"enemy_\d+\s*=\s*Enemies\.([A-Za-z0-9_]+)", "\n".join(group_sections.values()))
 missing_group_enemies = sorted(set(group_enemy_refs) - enemies)
 if missing_group_enemies:
     warn(f"Legacy enemy groups reference {len(missing_group_enemies)} enemy IDs absent from EnemySchema: " +
@@ -175,7 +175,7 @@ if not waves:
 if len(waves) != 10:
     warn(f"Expected the currently authored Kaizen story to remain at 10 waves; found {len(waves)}.")
 
-print(f"Kaizen static data audit: {len(waves)} story waves, {len(commands)} command tables, {len(enemies)} enemy IDs, {len(heroes)} hero IDs.")
+print(f"Kaizen static data audit: {len(waves)} story waves, {len(commands)} command tables, {len(enemies)} enemy IDs, {len(heroes)} active hero record(s).")
 if errors:
     print("\nERRORS:")
     for item in errors:
