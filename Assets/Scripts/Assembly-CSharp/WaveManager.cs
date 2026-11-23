@@ -276,6 +276,11 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 	{
 		Singleton<Profile>.Instance.ClearBonusWaveData();
 		WaveSchema waveData = GetWaveData(Singleton<Profile>.Instance.WaveToPlay, Singleton<Profile>.Instance.waveTypeToPlay);
+		if (waveData == null || string.IsNullOrEmpty(waveData.scene))
+		{
+			Debug.LogError("Cannot launch the selected wave: its data or scene reference is unavailable.");
+			return;
+		}
 		LoadingScreen.LoadLevel(waveData.scene);
 	}
 
@@ -305,9 +310,16 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		case WaveType.Wave_DailyChallenge:
 		{
 			ProceduralWaveSchema dailyChallengeProceduralWaveSchema = Singleton<Profile>.Instance.dailyChallengeProceduralWaveSchema;
+			if (dailyChallengeProceduralWaveSchema == null)
+			{
+				Debug.LogWarning("Daily challenge wave data has not been initialized.");
+				return null;
+			}
 			WaveSchema cachedWaveSchema = dailyChallengeProceduralWaveSchema.CachedWaveSchema;
 			if (cachedWaveSchema == null)
 			{
+				Debug.LogWarning("Daily challenge has no valid cached wave data.");
+				return null;
 			}
 			return cachedWaveSchema;
 		}
