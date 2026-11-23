@@ -51,3 +51,9 @@
 - Security review found the Android signing keystore committed at the repository root (its filename exposed that it had an associated password). It was removed from this feature branch and ignored; a separate non-draft cleanup PR #2 targets `master`. Treat the signing key as compromised and rotate/revoke if used. The file still exists on `master` and in history until cleanup/merge; no history rewrite was performed.
 - CI after the previous commit: static audit passed with 0 errors/29 warnings. Android job succeeded only by skipping Unity due to absent `UNITY_LICENSE`; no APK.
 - Current C# guards are not compiler-verified because Unity import/build remains blocked by license/editor availability.
+
+- Follow-up validation on feature-branch head `60db76d`: GitHub Actions data audit completed successfully (**0 errors, 29 warnings**); warnings remain the documented missing modes/reward/enemy-group references. Android workflow reports success because both Unity build and artifact upload were skipped (no `UNITY_LICENSE`).
+- A delimiter-balance structural scan of the edited `Profile.cs` and `WaveManager.cs` passed; this is not a C# compile or Unity test.
+- Opened non-draft security cleanup PR [#2](https://github.com/dhy8y/SvZ2-Kaizen/pull/2) against `master`. Both PR branches' tip trees no longer contain the keystore path, but default branch/history are still exposed until owner merges and handles history/key rotation.
+- Latest feature-branch commits: `a37604a` (daily challenge guard), `56de331` (invalid wave launch guard), `60db76d` (progress/PR update).
+- Rough project completion estimate updated to **10%**; this is a milestone estimate, not a measurable code coverage or playable-build score.
