@@ -43,3 +43,11 @@
 - Found a tracked Android keystore at repository root on both the feature branch and default branch. Its filename explicitly indicated a password. The binary was not downloaded or inspected.
 - Removed it from the feature branch and added ignore rules for local signing material; added `docs/signing-key-remediation.md`.
 - The default branch and Git history still contain the file until the PR is merged/owner performs cleanup. Treat the old signing key as compromised and rotate/revoke it if it was used. No history rewrite was performed.
+
+
+## 2026-11-23 follow-up
+- Added runtime guards for daily challenge data: missing/empty `ProceduralWaves`, no date schedule match, empty pools, disabled/missing challenge records, and invalid referenced waves now leave the challenge unavailable with a warning rather than indexing an empty list or dereferencing null. Non-daily profile cleanup no longer assumes helper/ability lists were allocated.
+- `WaveManager` now refuses to load a selected wave when its data or scene is missing, and daily challenge lookup reports a missing cached challenge rather than dereferencing null.
+- Security review found the Android signing keystore committed at the repository root (its filename exposed that it had an associated password). It was removed from this feature branch and ignored; a separate non-draft cleanup PR #2 targets `master`. Treat the signing key as compromised and rotate/revoke if used. The file still exists on `master` and in history until cleanup/merge; no history rewrite was performed.
+- CI after the previous commit: static audit passed with 0 errors/29 warnings. Android job succeeded only by skipping Unity due to absent `UNITY_LICENSE`; no APK.
+- Current C# guards are not compiler-verified because Unity import/build remains blocked by license/editor availability.
