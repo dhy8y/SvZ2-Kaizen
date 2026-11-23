@@ -37,3 +37,9 @@
 - `87b8835` — skip build when license secret is absent
 - `3919c3f` — keep validator compatible with future wave-count expansion
 - `a13c10b` — candidate enemy-resource mapping research
+
+
+## 2026-11-23 security review
+- Found a tracked Android keystore at repository root on both the feature branch and default branch. Its filename explicitly indicated a password. The binary was not downloaded or inspected.
+- Removed it from the feature branch and added ignore rules for local signing material; added `docs/signing-key-remediation.md`.
+- The default branch and Git history still contain the file until the PR is merged/owner performs cleanup. Treat the old signing key as compromised and rotate/revoke it if it was used. No history rewrite was performed.
