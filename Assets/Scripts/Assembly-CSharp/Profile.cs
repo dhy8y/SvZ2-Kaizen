@@ -1005,6 +1005,15 @@ public class Profile : Singleton<Profile>
 		return CurrentTime.DayOfYear;
 	}
 
+	private void ClearDailyChallengeData()
+	{
+		dailyChallengeProceduralWaveSchema = null;
+		dailyChallengeHeroSchema = null;
+		dailyChallengeHelpers = null;
+		dailyChallengeAbilities = null;
+		dailyRandomizer = null;
+	}
+
 	public void RefreshDailyChallenge()
 	{
 		if (mRefreshingDailyChallenge)
@@ -1012,68 +1021,103 @@ public class Profile : Singleton<Profile>
 			return;
 		}
 		mRefreshingDailyChallenge = true;
-		if (Singleton<Profile>.Instance.waveTypeToPlay == WaveManager.WaveType.Wave_DailyChallenge)
+		if (Singleton<Profile>.Instance.waveTypeToPlay != WaveManager.WaveType.Wave_DailyChallenge)
 		{
-			int dailyChallengeDaysSinceStart = GetDailyChallengeDaysSinceStart();
-			if (dailyRandomizer == null || dailyRandomizer.seed != dailyChallengeDaysSinceStart)
+			ClearDailyChallengeData();
+			mRefreshingDailyChallenge = false;
+			return;
+		}
+
+		int dailyChallengeDaysSinceStart = GetDailyChallengeDaysSinceStart();
+		if (dailyRandomizer != null && dailyRandomizer.seed == dailyChallengeDaysSinceStart)
+		{
+			mRefreshingDailyChallenge = false;
+			return;
+		}
+
+		ClearDailyChallengeData();
+		DataBundleRecordTable proceduralWaves = new DataBundleRecordTable("ProceduralWaves");
+		if (DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), proceduralWaves) <= 0)
+		{
+			Debug.LogWarning("Daily challenge unavailable: the ProceduralWaves table is missing or empty.");
+			mRefreshingDailyChallenge = false;
+			return;
+		}
+
+		dailyRandomizer = new SeededRandomizer(dailyChallengeDaysSinceStart);
+		dailyRandomizer.PushRandomSession(this);
+		DateTime currentTime = CurrentTime;
+		int month = currentTime.Month;
+		int day = currentTime.Day;
+		DataBundleRecordTable dataBundleRecordTable = new DataBundleRecordTable("DailyChallengeSchedule");
+		ProceduralWaveSelectionSchema proceduralWaveSelectionSchema = null;
+		foreach (ProceduralWaveSelectionSchema item in dataBundleRecordTable.EnumerateRecords<ProceduralWaveSelectionSchema>())
+		{
+			int num = DynamicEnum.ToIndex(item.startMonth);
+			if (num >= 0)
 			{
-				dailyRandomizer = new SeededRandomizer(dailyChallengeDaysSinceStart);
-				dailyRandomizer.PushRandomSession(this);
-				DateTime currentTime = CurrentTime;
-				int month = currentTime.Month;
-				int day = currentTime.Day;
-				DataBundleRecordTable dataBundleRecordTable = new DataBundleRecordTable("DailyChallengeSchedule");
-				ProceduralWaveSelectionSchema proceduralWaveSelectionSchema = null;
-				foreach (ProceduralWaveSelectionSchema item in dataBundleRecordTable.EnumerateRecords<ProceduralWaveSelectionSchema>())
-				{
-					int num = DynamicEnum.ToIndex(item.startMonth);
-					if (num >= 0)
-					{
-						num++;
-					}
-					int num2 = DynamicEnum.ToIndex(item.endMonth);
-					if (num2 >= 0)
-					{
-						num2++;
-					}
-					if (month >= num && month <= num2 && day >= item.startDay && day <= item.endDay)
-					{
-						proceduralWaveSelectionSchema = item;
-					}
-				}
-				DataBundleRecordTable proceduralWavePool = proceduralWaveSelectionSchema.proceduralWavePool;
-				ProceduralWaveListSchema[] array = proceduralWavePool.InitializeRecords<ProceduralWaveListSchema>();
-				List<ProceduralWaveSchema> list = new List<ProceduralWaveSchema>();
-				ProceduralWaveListSchema[] array2 = array;
-				foreach (ProceduralWaveListSchema proceduralWaveListSchema in array2)
-				{
-					ProceduralWaveSchema proceduralWaveSchema = proceduralWaveListSchema.proceduralWave.InitializeRecord<ProceduralWaveSchema>();
-					if (!proceduralWaveSchema.disabled)
-					{
-						list.Add(proceduralWaveSchema);
-					}
-				}
-				dailyChallengeProceduralWaveSchema = list[dailyChallengeDaysSinceStart % list.Count];
-				RefreshDailyChallengeHero();
-				RefreshDailyChallengeHelpers();
-				RefreshDailyChallengeAbilities();
-				RefreshDailyChallengeEnemies();
-				dailyRandomizer.PopRandomSession(this);
+				num++;
+			}
+			int num2 = DynamicEnum.ToIndex(item.endMonth);
+			if (num2 >= 0)
+			{
+				num2++;
+			}
+			if (month >= num && month <= num2 && day >= item.startDay && day <= item.endDay)
+			{
+				proceduralWaveSelectionSchema = item;
 			}
 		}
-		else
+
+		if (proceduralWaveSelectionSchema == null)
 		{
-			dailyChallengeProceduralWaveSchema = null;
-			dailyChallengeHeroSchema = null;
-			dailyChallengeHelpers.Clear();
-			dailyChallengeHelpers = null;
-			dailyChallengeAbilities.Clear();
-			dailyChallengeAbilities = null;
-			dailyRandomizer = null;
+			Debug.LogWarning("Daily challenge unavailable: no schedule entry matches today's date.");
+			dailyRandomizer.PopRandomSession(this);
+			ClearDailyChallengeData();
+			mRefreshingDailyChallenge = false;
+			return;
 		}
+
+		DataBundleRecordTable proceduralWavePool = proceduralWaveSelectionSchema.proceduralWavePool;
+		ProceduralWaveListSchema[] array = proceduralWavePool.InitializeRecords<ProceduralWaveListSchema>();
+		List<ProceduralWaveSchema> list = new List<ProceduralWaveSchema>();
+		if (array != null)
+		{
+			foreach (ProceduralWaveListSchema proceduralWaveListSchema in array)
+			{
+				if (proceduralWaveListSchema == null ||
+					DataBundleRecordKey.IsNullOrEmpty(proceduralWaveListSchema.proceduralWave))
+				{
+					continue;
+				}
+				ProceduralWaveSchema proceduralWaveSchema = proceduralWaveListSchema.proceduralWave.InitializeRecord<ProceduralWaveSchema>();
+				if (proceduralWaveSchema == null || proceduralWaveSchema.disabled ||
+					DataBundleRecordKey.IsNullOrEmpty(proceduralWaveSchema.wave) ||
+					WaveSchema.Initialize(proceduralWaveSchema.wave) == null)
+				{
+					continue;
+				}
+				list.Add(proceduralWaveSchema);
+			}
+		}
+
+		if (list.Count == 0)
+		{
+			Debug.LogWarning("Daily challenge unavailable: the selected pool contains no enabled challenges with valid wave data.");
+			dailyRandomizer.PopRandomSession(this);
+			ClearDailyChallengeData();
+			mRefreshingDailyChallenge = false;
+			return;
+		}
+
+		dailyChallengeProceduralWaveSchema = list[dailyChallengeDaysSinceStart % list.Count];
+		RefreshDailyChallengeHero();
+		RefreshDailyChallengeHelpers();
+		RefreshDailyChallengeAbilities();
+		RefreshDailyChallengeEnemies();
+		dailyRandomizer.PopRandomSession(this);
 		mRefreshingDailyChallenge = false;
 	}
-
 	public static IEnumerator CheckForUpdates()
 	{
 		SingletonSpawningMonoBehaviour<UpdateSystem>.Instance.DataBundlesModified = false;
