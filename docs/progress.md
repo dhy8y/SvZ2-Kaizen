@@ -57,3 +57,12 @@
 - Opened non-draft security cleanup PR [#2](https://github.com/dhy8y/SvZ2-Kaizen/pull/2) against `master`. Both PR branches' tip trees no longer contain the keystore path, but default branch/history are still exposed until owner merges and handles history/key rotation.
 - Latest feature-branch commits: `a37604a` (daily challenge guard), `56de331` (invalid wave launch guard), `60db76d` (progress/PR update).
 - Rough project completion estimate updated to **10%**; this is a milestone estimate, not a measurable code coverage or playable-build score.
+
+
+## 2026-11-24 daily-challenge safety and audit follow-up
+- Hardened `Profile.RefreshDailyChallenge`: candidates are filtered to have an authored wave with a scene and commands plus at least one hero currently present in `HeroesDatabase`. The selection method now returns safely when no valid hero remains, rather than indexing an empty hero pool. Missing helper-list tables and stale helper IDs are skipped safely.
+- Expanded the license-free validator to parse all Kaizen wave-command records, validate command types/enemy references/spawn counts and numeric fields, and audit daily-challenge schedule/pool/hero/helper references. Legacy enemy-group missing IDs are summarized to keep output manageable.
+- These are defensive checks only: daily challenges remain unavailable because `ProceduralWaves` is absent; only `HeroBalanced` is active, while several challenge pools target commented-out heroes; only four helper records are currently active and many legacy challenge pools reference inactive allies.
+- Static checks passed on the preceding validator revision with 0 errors; the current revision's Actions run is pending/being checked. The Python audit is not a Unity compile. 
+- No campaign/endless data was fabricated and no story wave balance changed. Current completion estimate remains **10%** (not a test-coverage metric).
+- Commits: `f7c600f` (daily-challenge runtime guard), `2c9ca1d` (command/challenge audit), `c15f1ca` (regex fix), `a0d9220` (spawn validation), `b500239` and `502c61a` (warning aggregation).
