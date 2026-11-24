@@ -147,15 +147,6 @@ for mode, fields in play_modes.items():
     if base == "Waves" and maximum > len(waves):
         fail(f"Play mode '{mode}' maxBaseWave={maximum}, but only {len(waves)} story records exist.")
 
-# Procedural challenge definitions point into WaveSchema tables; report missing data without failing
-# the story campaign checks, since this subsystem is marked unfinished in Kaizen.
-for challenge, fields in procedural_records.items():
-    ref = fields.get("wave", "")
-    if ref:
-        table = ref.split(".", 1)[0]
-        if table not in wave_sections:
-            warn(f"Daily challenge '{challenge}' points to missing wave table '{table}'.")
-
 # Audit every Kaizen command table, not just the ten story tables.
 def command_records(section):
     parsed = []
@@ -175,8 +166,11 @@ def command_records(section):
     return parsed
 
 valid_command_types = {"", "Default", "Spawn", "Delay", "Banner", "MoveGate", "Tutorial"}
+total_command_records = 0
+total_spawn_commands = 0
 for command_name, section in commands.items():
     parsed_commands = command_records(section)
+    total_command_records += len(parsed_commands)
     if not parsed_commands:
         warn(f"Command table '{command_name}' has no parseable commands.")
     for command_index, command in enumerate(parsed_commands, 1):
@@ -197,6 +191,7 @@ for command_name, section in commands.items():
         if group_ref and group_ref not in group_sections:
             warn(f"{command_name} command {command_index}: enemy group table '{group_ref}' is missing.")
         if command_type == "Spawn":
+            total_spawn_commands += 1
             try:
                 spawn_count = int(command.get("count", "0") or "0")
                 if spawn_count <= 0:
@@ -211,7 +206,14 @@ for command_name, section in commands.items():
             except ValueError:
                 fail(f"{command_name} command {command_index}: Delay duration is not numeric.")
 
-# Audit the daily challenge schedules/pools and their active hero/helper references.
+# Audit daily challenge schedules, waves and valid selectable hero/helper records.
+missing_challenge_waves = set()
+missing_hero_pool_challenges = set()
+no_active_hero_challenges = set()
+inactive_hero_ids = set()
+missing_helper_pool_challenges = set()
+inactive_helper_ids = set()
+
 for schedule_id, schedule in daily_schedule.items():
     pool_name = schedule.get("proceduralWavePool", "")
     if not pool_name:
@@ -238,13 +240,12 @@ for challenge_id, challenge in procedural_records.items():
     wave_ref = challenge.get("wave", "")
     if wave_ref:
         table_name, _, record_id = wave_ref.partition(".")
-        if table_name not in wave_sections:
-            warn(f"Enabled daily challenge '{challenge_id}' references missing wave table '{table_name}'.")
-        elif record_id and record_id not in records(wave_sections[table_name]):
-            warn(f"Enabled daily challenge '{challenge_id}' references missing wave '{wave_ref}'.")
+        if table_name not in wave_sections or (record_id and record_id not in records(wave_sections.get(table_name, ""))):
+            missing_challenge_waves.add(challenge_id)
     hero_table = challenge.get("possibleHeroes", "")
     if not hero_table or hero_table not in hero_list_sections:
-        warn(f"Enabled daily challenge '{challenge_id}' has missing/empty possibleHeroes table '{hero_table}'.")
+        missing_hero_pool_challenges.add(challenge_id)
+        no_active_hero_challenges.add(challenge_id)
     else:
         hero_entries = records(hero_list_sections[hero_table])
         valid_hero_count = 0
@@ -254,18 +255,31 @@ for challenge_id, challenge in procedural_records.items():
             if hero_id in heroes:
                 valid_hero_count += 1
             else:
-                warn(f"Daily challenge '{challenge_id}' hero pool '{hero_table}' references inactive/missing hero '{hero_id}'.")
+                inactive_hero_ids.add(hero_id)
         if valid_hero_count == 0:
-            warn(f"Enabled daily challenge '{challenge_id}' has no active hero in pool '{hero_table}'.")
+            no_active_hero_challenges.add(challenge_id)
     helper_table = challenge.get("possibleHelpers", "")
     if not helper_table or helper_table not in helper_list_sections:
-        warn(f"Enabled daily challenge '{challenge_id}' has missing possibleHelpers table '{helper_table}'.")
+        missing_helper_pool_challenges.add(challenge_id)
     else:
         for helper_key, helper_entry in records(helper_list_sections[helper_table]).items():
             helper_ref = helper_entry.get("ability", f"Helpers.{helper_key}")
             helper_id = helper_ref.split(".", 1)[1] if helper_ref.startswith("Helpers.") else helper_ref
             if helper_id not in active_helpers:
-                warn(f"Daily challenge '{challenge_id}' helper pool '{helper_table}' references missing/inactive helper '{helper_id}'.")
+                inactive_helper_ids.add(helper_id)
+
+if missing_challenge_waves:
+    warn("Enabled daily challenges reference missing wave records: " + ", ".join(sorted(missing_challenge_waves)) + ".")
+if missing_hero_pool_challenges:
+    warn("Enabled daily challenges have missing hero-list tables: " + ", ".join(sorted(missing_hero_pool_challenges)) + ".")
+if no_active_hero_challenges:
+    warn("Enabled daily challenges have no currently enabled hero choice: " + ", ".join(sorted(no_active_hero_challenges)) + ".")
+if inactive_hero_ids:
+    warn("Daily challenge hero lists reference inactive/missing heroes: " + ", ".join(sorted(inactive_hero_ids)) + ".")
+if missing_helper_pool_challenges:
+    warn("Enabled daily challenges have missing helper-list tables: " + ", ".join(sorted(missing_helper_pool_challenges)) + ".")
+if inactive_helper_ids:
+    warn("Daily challenge helper lists reference inactive/missing helpers: " + ", ".join(sorted(inactive_helper_ids)) + ".")
 
 # Aggregate legacy group mismatches to keep CI output readable.
 group_missing_ids = set()
@@ -303,16 +317,9 @@ if unsupported_reward_values:
     warn("Reward data contains values outside the currently processed coins/pachinkoBalls: " +
          ", ".join(unsupported_reward_values) + " (reward collection/banking code is unfinished).")
 
-# EnemyGroupSchema retains legacy records. Only report missing IDs, do not fail the story check.
-group_enemy_refs = re.findall(r"enemy_\d+\s*=\s*Enemies\.([A-Za-z0-9_]+)", "\n".join(group_sections.values()))
-missing_group_enemies = sorted(set(group_enemy_refs) - enemies)
-if missing_group_enemies:
-    warn(f"Legacy enemy groups reference {len(missing_group_enemies)} enemy IDs absent from EnemySchema: " +
-         ", ".join(missing_group_enemies[:12]) + (" ..." if len(missing_group_enemies) > 12 else ""))
-
 if not waves:
     fail("No authored [Waves] records found.")
-print(f"Kaizen static data audit: {len(waves)} story waves, {len(commands)} command tables, {len(enemies)} enemy IDs, {len(heroes)} active hero record(s).")
+print(f"Kaizen static data audit: {len(waves)} story waves, {len(commands)} command tables / {total_command_records} commands ({total_spawn_commands} spawns), {len(enemies)} enemy IDs, {len(heroes)} active hero record(s).")
 if errors:
     print("\nERRORS:")
     for item in errors:
