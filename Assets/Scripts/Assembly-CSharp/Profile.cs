@@ -873,20 +873,58 @@ public class Profile : Singleton<Profile>
 		}
 	}
 
-	private void RefreshDailyChallengeHero()
+	private bool HasValidDailyChallengeHeroPool(ProceduralWaveSchema challenge)
+	{
+		if (challenge == null || challenge.possibleHeroes == null ||
+			string.IsNullOrEmpty(challenge.possibleHeroes.RecordTable))
+		{
+			return false;
+		}
+
+		foreach (string recordKey in DataBundleRuntime.Instance.EnumerateRecordKeys(
+			typeof(HeroListSchema), challenge.possibleHeroes.RecordTable))
+		{
+			string heroId = DataBundleRuntime.RecordKey(recordKey);
+			if (Singleton<HeroesDatabase>.Instance[heroId] != null)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private bool RefreshDailyChallengeHero()
 	{
 		DataBundleRecordTable possibleHeroes = dailyChallengeProceduralWaveSchema.possibleHeroes;
 		List<string> list = new List<string>(5);
-		foreach (string item2 in DataBundleRuntime.Instance.EnumerateRecordKeys(typeof(HeroListSchema), possibleHeroes.RecordTable))
+		if (possibleHeroes == null || string.IsNullOrEmpty(possibleHeroes.RecordTable))
+		{
+			return false;
+		}
+
+		foreach (string item2 in DataBundleRuntime.Instance.EnumerateRecordKeys(
+			typeof(HeroListSchema), possibleHeroes.RecordTable))
 		{
 			string item = DataBundleRuntime.RecordKey(item2);
-			list.Add(item);
+			if (Singleton<HeroesDatabase>.Instance[item] != null)
+			{
+				list.Add(item);
+			}
 		}
-		int count = list.Count;
-		int index = dailyRandomizer.NextRange(0, count - 1, this);
+		if (list.Count == 0)
+		{
+			return false;
+		}
+
+		int index = dailyRandomizer.NextRange(0, list.Count - 1, this);
 		string id = list[index];
 		dailyChallengeHeroSchema = Singleton<HeroesDatabase>.Instance[id];
+		if (dailyChallengeHeroSchema == null)
+		{
+			return false;
+		}
 		CurrentHeroId = dailyChallengeHeroSchema.id;
+		return true;
 	}
 
 	private void RefreshDailyChallengeHelpers()
@@ -901,10 +939,18 @@ public class Profile : Singleton<Profile>
 		}
 		DataBundleRecordTable possibleHelpers = dailyChallengeProceduralWaveSchema.possibleHelpers;
 		List<string> list = new List<string>(10);
+		if (possibleHelpers == null || string.IsNullOrEmpty(possibleHelpers.RecordTable))
+		{
+			return;
+		}
 		foreach (string item2 in DataBundleRuntime.Instance.EnumerateRecordKeys(typeof(HelperListSchema), possibleHelpers.RecordTable))
 		{
 			string text = DataBundleRuntime.RecordKey(item2);
 			HelperSchema helperSchema = Singleton<HelpersDatabase>.Instance[text];
+			if (helperSchema == null)
+			{
+				continue;
+			}
 			DataBundleRecordKey requiredHero = helperSchema.requiredHero;
 			if (DataBundleRecordKey.IsNullOrEmpty(requiredHero) || DataBundleRuntime.RecordKey(requiredHero) == dailyChallengeHeroSchema.id)
 			{
@@ -931,6 +977,11 @@ public class Profile : Singleton<Profile>
 			{
 				string id = dailyChallengeHelpers[num2];
 				HelperSchema helperSchema2 = Singleton<HelpersDatabase>.Instance[id];
+				if (helperSchema2 == null)
+				{
+					dailyChallengeHelpers.RemoveAt(num2);
+					continue;
+				}
 				DataBundleRecordKey upgradeAlliesFrom = helperSchema2.upgradeAlliesFrom;
 				bool flag = !DataBundleRecordKey.IsNullOrEmpty(upgradeAlliesFrom);
 				BuffSchema buffSchema = helperSchema2.buffSchema;
@@ -1093,7 +1144,13 @@ public class Profile : Singleton<Profile>
 				ProceduralWaveSchema proceduralWaveSchema = proceduralWaveListSchema.proceduralWave.InitializeRecord<ProceduralWaveSchema>();
 				if (proceduralWaveSchema == null || proceduralWaveSchema.disabled ||
 					DataBundleRecordKey.IsNullOrEmpty(proceduralWaveSchema.wave) ||
-					WaveSchema.Initialize(proceduralWaveSchema.wave) == null)
+					!HasValidDailyChallengeHeroPool(proceduralWaveSchema))
+				{
+					continue;
+				}
+				WaveSchema challengeWave = WaveSchema.Initialize(proceduralWaveSchema.wave);
+				if (challengeWave == null || challengeWave.Commands == null || challengeWave.Commands.Length == 0 ||
+					string.IsNullOrEmpty(challengeWave.scene))
 				{
 					continue;
 				}
@@ -1111,7 +1168,14 @@ public class Profile : Singleton<Profile>
 		}
 
 		dailyChallengeProceduralWaveSchema = list[dailyChallengeDaysSinceStart % list.Count];
-		RefreshDailyChallengeHero();
+		if (!RefreshDailyChallengeHero())
+		{
+			Debug.LogWarning("Daily challenge unavailable: the selected challenge has no valid active hero.");
+			dailyRandomizer.PopRandomSession(this);
+			ClearDailyChallengeData();
+			mRefreshingDailyChallenge = false;
+			return;
+		}
 		RefreshDailyChallengeHelpers();
 		RefreshDailyChallengeAbilities();
 		RefreshDailyChallengeEnemies();
