@@ -161,13 +161,13 @@ def command_records(section):
     parsed = []
     current = None
     for line in section.splitlines():
-        heading = re.match(r"^\\s*(?:\\*|[0-9]+):\\s*$", line)
+        heading = re.match(r"^\s*(?:\*|[0-9]+):\s*$", line)
         if heading:
             if current is not None:
                 parsed.append(current)
             current = {}
             continue
-        field = re.match(r"^\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*?)\\s*$", line)
+        field = re.match(r"^\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$", line)
         if field and current is not None:
             current[field.group(1)] = field.group(2)
     if current is not None:
