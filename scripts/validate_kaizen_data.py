@@ -14,6 +14,11 @@ REWARD_FILE = BUNDLE / "WaveRewardSchema.txt"
 PLAYMODE_FILE = BUNDLE / "PlayModeSchema.txt"
 GROUP_FILE = BUNDLE / "EnemyGroupSchema.txt"
 PROCEDURAL_FILE = BUNDLE / "ProceduralWaveSchema.txt"
+PROCEDURAL_LIST_FILE = BUNDLE / "ProceduralWaveListSchema.txt"
+PROCEDURAL_SELECTION_FILE = BUNDLE / "ProceduralWaveSelectionSchema.txt"
+HERO_LIST_FILE = BUNDLE / "HeroListSchema.txt"
+HELPER_LIST_FILE = BUNDLE / "HelperListSchema.txt"
+HELPER_FILE = BUNDLE / "HelperSchema.txt"
 
 errors = []
 warnings = []
@@ -70,6 +75,11 @@ reward_sections = sections(read_required(REWARD_FILE))
 playmode_sections = sections(read_required(PLAYMODE_FILE))
 group_sections = sections(read_required(GROUP_FILE))
 procedural_sections = sections(read_required(PROCEDURAL_FILE))
+procedural_list_sections = sections(read_required(PROCEDURAL_LIST_FILE))
+procedural_selection_sections = sections(read_required(PROCEDURAL_SELECTION_FILE))
+hero_list_sections = sections(read_required(HERO_LIST_FILE))
+helper_list_sections = sections(read_required(HELPER_LIST_FILE))
+helper_sections = sections(read_required(HELPER_FILE))
 
 waves = records(wave_sections.get("Waves", ""))
 commands = {name: section for name, section in command_sections.items()}
@@ -79,6 +89,8 @@ reward_defs = records(reward_sections.get("Reward_Table", ""))
 reward_records = set(reward_defs)
 play_modes = records(playmode_sections.get("PlayModes", ""))
 procedural_records = records(procedural_sections.get("DailyChallenges", ""))
+active_helpers = {rec.get("id", key) for key, rec in records(helper_sections.get("Helpers", "")).items()}
+daily_schedule = records(procedural_selection_sections.get("DailyChallengeSchedule", ""))
 
 
 scene_names = {p.stem for p in (ROOT / "Assets" / "Scenes").rglob("*.unity")}
@@ -143,6 +155,115 @@ for challenge, fields in procedural_records.items():
         table = ref.split(".", 1)[0]
         if table not in wave_sections:
             warn(f"Daily challenge '{challenge}' points to missing wave table '{table}'.")
+
+# Audit every Kaizen command table, not just the ten story tables.
+def command_records(section):
+    parsed = []
+    current = None
+    for line in section.splitlines():
+        heading = re.match(r"^\\s*(?:\\*|[0-9]+):\\s*$", line)
+        if heading:
+            if current is not None:
+                parsed.append(current)
+            current = {}
+            continue
+        field = re.match(r"^\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*?)\\s*$", line)
+        if field and current is not None:
+            current[field.group(1)] = field.group(2)
+    if current is not None:
+        parsed.append(current)
+    return parsed
+
+valid_command_types = {"", "Default", "Spawn", "Delay", "Banner", "MoveGate", "Tutorial"}
+for command_name, section in commands.items():
+    parsed_commands = command_records(section)
+    if not parsed_commands:
+        warn(f"Command table '{command_name}' has no parseable commands.")
+    for command_index, command in enumerate(parsed_commands, 1):
+        command_type = command.get("type", "")
+        if command_type not in valid_command_types:
+            fail(f"{command_name} command {command_index}: unsupported type '{command_type}'.")
+        enemy_ref = command.get("enemy", "")
+        if enemy_ref.startswith("Enemies."):
+            enemy_id = enemy_ref.split(".", 1)[1]
+            if enemy_id not in enemies:
+                fail(f"{command_name} command {command_index}: enemy '{enemy_id}' is missing from EnemySchema.")
+        group_ref = command.get("enemyGroup", "")
+        if group_ref:
+            if group_ref not in group_sections:
+                warn(f"{command_name} command {command_index}: enemy group table '{group_ref}' is missing.")
+            if command_type == "Spawn" and not enemy_ref and not group_ref:
+                fail(f"{command_name} command {command_index}: Spawn has neither an enemy nor an enemyGroup.")
+        if command_type == "Spawn" and int(command.get("count", "0") or "0") <= 0:
+            fail(f"{command_name} command {command_index}: Spawn count must be greater than zero.")
+        if command_type == "Delay" and float(command.get("duration", "0") or "0") < 0:
+            fail(f"{command_name} command {command_index}: Delay duration cannot be negative.")
+
+# Audit the daily challenge schedules/pools and their active hero/helper references.
+for schedule_id, schedule in daily_schedule.items():
+    pool_name = schedule.get("proceduralWavePool", "")
+    if not pool_name:
+        warn(f"DailyChallengeSchedule '{schedule_id}' has no proceduralWavePool.")
+        continue
+    if pool_name not in procedural_list_sections:
+        warn(f"DailyChallengeSchedule '{schedule_id}' references missing pool '{pool_name}'.")
+        continue
+    pool_records = records(procedural_list_sections[pool_name])
+    if not pool_records:
+        warn(f"Daily challenge pool '{pool_name}' is empty.")
+    for pool_record_id, pool_record in pool_records.items():
+        challenge_ref = pool_record.get("proceduralWave", "")
+        if not challenge_ref.startswith("DailyChallenges."):
+            warn(f"Daily challenge pool '{pool_name}/{pool_record_id}' has invalid reference '{challenge_ref}'.")
+            continue
+        challenge_id = challenge_ref.split(".", 1)[1]
+        if challenge_id not in procedural_records:
+            warn(f"Daily challenge pool '{pool_name}/{pool_record_id}' references missing challenge '{challenge_id}'.")
+
+for challenge_id, challenge in procedural_records.items():
+    if challenge.get("disabled", "False").lower() == "true":
+        continue
+    wave_ref = challenge.get("wave", "")
+    if wave_ref:
+        table_name, _, record_id = wave_ref.partition(".")
+        if table_name not in wave_sections:
+            warn(f"Enabled daily challenge '{challenge_id}' references missing wave table '{table_name}'.")
+        elif record_id and record_id not in records(wave_sections[table_name]):
+            warn(f"Enabled daily challenge '{challenge_id}' references missing wave '{wave_ref}'.")
+    hero_table = challenge.get("possibleHeroes", "")
+    if not hero_table or hero_table not in hero_list_sections:
+        warn(f"Enabled daily challenge '{challenge_id}' has missing/empty possibleHeroes table '{hero_table}'.")
+    else:
+        hero_entries = records(hero_list_sections[hero_table])
+        valid_hero_count = 0
+        for hero_key, hero_entry in hero_entries.items():
+            hero_ref = hero_entry.get("hero", f"Heroes.{hero_key}")
+            hero_id = hero_ref.split(".", 1)[1] if hero_ref.startswith("Heroes.") else hero_ref
+            if hero_id in heroes:
+                valid_hero_count += 1
+            else:
+                warn(f"Daily challenge '{challenge_id}' hero pool '{hero_table}' references inactive/missing hero '{hero_id}'.")
+        if valid_hero_count == 0:
+            warn(f"Enabled daily challenge '{challenge_id}' has no active hero in pool '{hero_table}'.")
+    helper_table = challenge.get("possibleHelpers", "")
+    if not helper_table or helper_table not in helper_list_sections:
+        warn(f"Enabled daily challenge '{challenge_id}' has missing possibleHelpers table '{helper_table}'.")
+    else:
+        for helper_key, helper_entry in records(helper_list_sections[helper_table]).items():
+            helper_ref = helper_entry.get("ability", f"Helpers.{helper_key}")
+            helper_id = helper_ref.split(".", 1)[1] if helper_ref.startswith("Helpers.") else helper_ref
+            if helper_id not in active_helpers:
+                warn(f"Daily challenge '{challenge_id}' helper pool '{helper_table}' references missing/inactive helper '{helper_id}'.")
+
+# Validate legacy enemy groups independently, including all three slots.
+for group_table, group_section in group_sections.items():
+    for group_id, group in records(group_section).items():
+        for slot in ("enemy_1", "enemy_2", "enemy_3"):
+            enemy_ref = group.get(slot, "")
+            if enemy_ref.startswith("Enemies."):
+                enemy_id = enemy_ref.split(".", 1)[1]
+                if enemy_id not in enemies:
+                    warn(f"Enemy group '{group_table}/{group_id}' references missing enemy '{enemy_id}'.")
 
 # WaveRewardSchema has data, but the current story records do not assign any rewards.
 assigned_reward_ids = set()
