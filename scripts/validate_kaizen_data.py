@@ -267,15 +267,22 @@ for challenge_id, challenge in procedural_records.items():
             if helper_id not in active_helpers:
                 warn(f"Daily challenge '{challenge_id}' helper pool '{helper_table}' references missing/inactive helper '{helper_id}'.")
 
-# Validate legacy enemy groups independently, including all three slots.
-for group_table, group_section in group_sections.items():
-    for group_id, group in records(group_section).items():
+# Aggregate legacy group mismatches to keep CI output readable.
+group_missing_ids = set()
+group_missing_slots = 0
+for group_section in group_sections.values():
+    for group in records(group_section).values():
         for slot in ("enemy_1", "enemy_2", "enemy_3"):
             enemy_ref = group.get(slot, "")
             if enemy_ref.startswith("Enemies."):
                 enemy_id = enemy_ref.split(".", 1)[1]
                 if enemy_id not in enemies:
-                    warn(f"Enemy group '{group_table}/{group_id}' references missing enemy '{enemy_id}'.")
+                    group_missing_ids.add(enemy_id)
+                    group_missing_slots += 1
+if group_missing_ids:
+    warn(f"Legacy enemy groups contain {group_missing_slots} missing enemy-reference slots across " +
+         f"{len(group_missing_ids)} IDs: " + ", ".join(sorted(group_missing_ids)[:15]) +
+         (" ..." if len(group_missing_ids) > 15 else ""))
 
 # WaveRewardSchema has data, but the current story records do not assign any rewards.
 assigned_reward_ids = set()
