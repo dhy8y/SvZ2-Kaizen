@@ -73,3 +73,10 @@
 - Confirmed existing endless scale config is linear: health/damage 1.05 per step, drops 1.0; `CalcMultiplier` is `1 + (factor - 1) * times`. Boss cadence is 10. See [endless adaptation notes](docs/endless-adaptation-notes.md).
 - Security audit found credential-like service configuration values in tracked `ConfigSchema.txt` (monetization, matchmaking/platform, push and attribution integrations). Values were not copied or exposed. Added owner-remediation guidance to security PR #2; rotate/revoke if valid and remove/migrate after assessing integration dependencies.
 - Tooling mistake: the endless research note was briefly committed to default branch by omitting a branch argument; I immediately deleted it from the default branch and re-created it on this feature branch. No code/data changed on default branch; the two documentation commits remain visible in history.
+
+
+## 2026-11-24 scene gate-marker validation
+- The static audit now reads referenced Unity scene YAML on CI and checks contiguous `RGatePosition1..N` markers against each authored story `MoveGate` command. The current story scenes passed this check with no gate-position warnings; this is a static YAML check, not scene import/play testing.
+- Current branch CI commit `01def564`: **0 errors, 16 warnings**; 10 story waves, 10 command tables, 188 commands (171 spawns), 13 enemy IDs, one active hero. Warnings remain the missing endless/multiplayer/procedural records, inactive challenge roster references, legacy enemy groups, and incomplete rewards.
+- Android CI still reports success by skipping Unity and APK upload because `UNITY_LICENSE` is not configured. No Unity compile, device run or APK is claimed.
+- Commit: `01def564` scene marker audit, `8bd7a567` contiguous marker count correction. The endless research note is on this feature branch; the accidental default-branch documentation commit was removed immediately and verified absent at the branch tip (history retains the commits).
