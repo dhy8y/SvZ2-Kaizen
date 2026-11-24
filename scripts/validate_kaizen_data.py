@@ -226,7 +226,10 @@ for wave_id, wave in waves.items():
     command_name = wave.get("commands", "")
     if scene_name not in scene_gate_markers or command_name not in commands:
         continue
-    marker_count = len(scene_gate_markers[scene_name])
+    markers = scene_gate_markers[scene_name]
+    marker_count = 0
+    while marker_count + 1 in markers:
+        marker_count += 1
     for command_index, command in enumerate(command_records(commands[command_name]), 1):
         if command.get("type") != "MoveGate":
             continue
