@@ -93,7 +93,9 @@ active_helpers = {rec.get("id", key) for key, rec in records(helper_sections.get
 daily_schedule = records(procedural_selection_sections.get("DailyChallengeSchedule", ""))
 
 
-scene_names = {p.stem for p in (ROOT / "Assets" / "Scenes").rglob("*.unity")}
+scene_paths = {p.stem: p for p in (ROOT / "Assets" / "Scenes").rglob("*.unity")}
+scene_names = set(scene_paths)
+scene_gate_markers = {}
 wave_refs = []
 wave_enemy_refs = []
 wave_group_refs = []
@@ -104,6 +106,17 @@ for wave_id, wave in waves.items():
     scene = wave.get("scene", "")
     if scene and scene not in scene_names:
         fail(f"Wave {wave_id}: scene '{scene}' is missing under Assets/Scenes.")
+    elif scene:
+        scene_path = scene_paths[scene]
+        if scene not in scene_gate_markers:
+            scene_text = scene_path.read_text(encoding="utf-8", errors="replace")
+            scene_gate_markers[scene] = sorted(set(int(marker) for marker in re.findall(
+                r"m_Name:\s*RGatePosition([0-9]+)", scene_text)))
+        markers = scene_gate_markers[scene]
+        if not markers:
+            warn(f"Story scene '{scene}' contains no serialized RGatePosition markers; gate movement will be disabled.")
+        elif markers != list(range(1, markers[-1] + 1)):
+            warn(f"Story scene '{scene}' has non-contiguous RGatePosition markers: {markers}. InGameImpl stops at the first missing marker.")
     hero = wave.get("recommendedHero", "")
     if hero.startswith("Heroes."):
         hero = hero.split(".", 1)[1]
@@ -205,6 +218,23 @@ for command_name, section in commands.items():
                     fail(f"{command_name} command {command_index}: Delay duration cannot be negative.")
             except ValueError:
                 fail(f"{command_name} command {command_index}: Delay duration is not numeric.")
+
+# Compare story MoveGate commands with the serialized marker counts in their scenes.
+gate_position_indices = {"Close": 0, "Middle": 1, "Far": 2}
+for wave_id, wave in waves.items():
+    scene_name = wave.get("scene", "")
+    command_name = wave.get("commands", "")
+    if scene_name not in scene_gate_markers or command_name not in commands:
+        continue
+    marker_count = len(scene_gate_markers[scene_name])
+    for command_index, command in enumerate(command_records(commands[command_name]), 1):
+        if command.get("type") != "MoveGate":
+            continue
+        gate_position = command.get("gatePos", "Close")
+        if gate_position not in gate_position_indices:
+            warn(f"Wave {wave_id}/{command_name} command {command_index}: unknown gate position '{gate_position}'.")
+        elif gate_position_indices[gate_position] >= marker_count:
+            warn(f"Wave {wave_id}/{command_name} command {command_index}: '{gate_position}' needs marker index {gate_position_indices[gate_position]}, but scene '{scene_name}' has {marker_count} contiguous marker(s). WaveManager clamps this position.")
 
 # Audit daily challenge schedules, waves and valid selectable hero/helper records.
 missing_challenge_waves = set()
