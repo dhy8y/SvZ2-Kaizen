@@ -66,3 +66,10 @@
 - GitHub Actions on the current branch head passed: **0 errors, 16 aggregated warnings**. It parsed 188 wave-command records (171 spawns), checked the active story wave references, and summarized unfinished modes/legacy data. The Python audit is not a Unity compile.
 - No campaign/endless data was fabricated and no story wave balance changed. Current completion estimate remains **10%** (not a test-coverage metric).
 - Commits: `f7c600f` (daily-challenge runtime guard), `2c9ca1d` (command/challenge audit), `c15f1ca` (regex fix), `a0d9220` (spawn validation), `b500239` and `502c61a` (warning aggregation).
+
+
+## 2026-11-24 endless-source/security follow-up
+- Research against the reference repository's current `main`: 9 endless entries share one legacy command table; 3 boss entries share another and use the old Shuten Doji ID. Expanding the six enemy groups gives 27 distinct enemy IDs, only 3 resource-path candidate matches in Kaizen. The legacy group audit still finds 140 missing enemy slots across 36 IDs. No endless data was copied.
+- Confirmed existing endless scale config is linear: health/damage 1.05 per step, drops 1.0; `CalcMultiplier` is `1 + (factor - 1) * times`. Boss cadence is 10. See [endless adaptation notes](docs/endless-adaptation-notes.md).
+- Security audit found credential-like service configuration values in tracked `ConfigSchema.txt` (monetization, matchmaking/platform, push and attribution integrations). Values were not copied or exposed. Added owner-remediation guidance to security PR #2; rotate/revoke if valid and remove/migrate after assessing integration dependencies.
+- Tooling mistake: the endless research note was briefly committed to default branch by omitting a branch argument; I immediately deleted it from the default branch and re-created it on this feature branch. No code/data changed on default branch; the two documentation commits remain visible in history.
