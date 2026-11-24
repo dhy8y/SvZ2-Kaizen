@@ -184,20 +184,32 @@ for command_name, section in commands.items():
         if command_type not in valid_command_types:
             fail(f"{command_name} command {command_index}: unsupported type '{command_type}'.")
         enemy_ref = command.get("enemy", "")
-        if enemy_ref.startswith("Enemies."):
-            enemy_id = enemy_ref.split(".", 1)[1]
-            if enemy_id not in enemies:
-                fail(f"{command_name} command {command_index}: enemy '{enemy_id}' is missing from EnemySchema.")
+        if enemy_ref:
+            if not enemy_ref.startswith("Enemies."):
+                fail(f"{command_name} command {command_index}: malformed enemy reference '{enemy_ref}'.")
+            else:
+                enemy_id = enemy_ref.split(".", 1)[1]
+                if enemy_id not in enemies:
+                    fail(f"{command_name} command {command_index}: enemy '{enemy_id}' is missing from EnemySchema.")
         group_ref = command.get("enemyGroup", "")
-        if group_ref:
-            if group_ref not in group_sections:
-                warn(f"{command_name} command {command_index}: enemy group table '{group_ref}' is missing.")
-            if command_type == "Spawn" and not enemy_ref and not group_ref:
-                fail(f"{command_name} command {command_index}: Spawn has neither an enemy nor an enemyGroup.")
-        if command_type == "Spawn" and int(command.get("count", "0") or "0") <= 0:
-            fail(f"{command_name} command {command_index}: Spawn count must be greater than zero.")
-        if command_type == "Delay" and float(command.get("duration", "0") or "0") < 0:
-            fail(f"{command_name} command {command_index}: Delay duration cannot be negative.")
+        if command_type == "Spawn" and not enemy_ref and not group_ref:
+            fail(f"{command_name} command {command_index}: Spawn has neither an enemy nor an enemyGroup.")
+        if group_ref and group_ref not in group_sections:
+            warn(f"{command_name} command {command_index}: enemy group table '{group_ref}' is missing.")
+        if command_type == "Spawn":
+            try:
+                spawn_count = int(command.get("count", "0") or "0")
+                if spawn_count <= 0:
+                    fail(f"{command_name} command {command_index}: Spawn count must be greater than zero.")
+            except ValueError:
+                fail(f"{command_name} command {command_index}: Spawn count is not an integer.")
+        if command_type == "Delay":
+            try:
+                delay = float(command.get("duration", "0") or "0")
+                if delay < 0:
+                    fail(f"{command_name} command {command_index}: Delay duration cannot be negative.")
+            except ValueError:
+                fail(f"{command_name} command {command_index}: Delay duration is not numeric.")
 
 # Audit the daily challenge schedules/pools and their active hero/helper references.
 for schedule_id, schedule in daily_schedule.items():
