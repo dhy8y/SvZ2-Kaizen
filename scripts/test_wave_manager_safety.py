@@ -56,5 +56,31 @@ class WaveManagerSpawnSafetyTests(unittest.TestCase):
         self.assertIn("return;", body[null_guard:destroy_helper])
 
 
+PROFILE_SOURCE = Path(__file__).resolve().parents[1] / "Assets/Scripts/Assembly-CSharp/Profile.cs"
+PROFILE_TEXT = PROFILE_SOURCE.read_text(encoding="utf-8")
+
+
+def profile_method_body(method_name):
+    match = re.search(r"\\bpublic\\s+void\\s+" + re.escape(method_name) + r"\\s*\\([^)]*\\)\\s*\\{", PROFILE_TEXT)
+    if not match:
+        raise AssertionError(f"Profile method {method_name} was not found.")
+    start = match.end() - 1
+    depth = 0
+    for index in range(start, len(PROFILE_TEXT)):
+        if PROFILE_TEXT[index] == "{":
+            depth += 1
+        elif PROFILE_TEXT[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return PROFILE_TEXT[start:index + 1]
+    raise AssertionError(f"Profile method {method_name} has unbalanced braces.")
+
+    def test_save_progression_uses_configured_story_boundary(self):
+        body = profile_method_body("PostLoadSyncing")
+        self.assertIn("int finalStoryWave = maxBaseWave;", body)
+        self.assertIn("CurrentStoryWave = finalStoryWave + 1;", body)
+        self.assertNotRegex(body, r"highestUnlockedWave\\s*==\\s*50")
+
+
 if __name__ == "__main__":
     unittest.main()
