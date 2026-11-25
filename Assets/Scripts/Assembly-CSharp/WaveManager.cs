@@ -507,6 +507,11 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public void SpawnExtraEnemy(string cmd, Vector3 position, float spawnRange)
 	{
+		if (string.IsNullOrEmpty(cmd) || mAllDifferentEnemies == null)
+		{
+			return;
+		}
+
 		bool flag = false;
 		foreach (string mAllDifferentEnemy in mAllDifferentEnemies)
 		{
