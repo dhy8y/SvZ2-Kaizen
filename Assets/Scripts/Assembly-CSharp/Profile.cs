@@ -2250,9 +2250,13 @@ public class Profile : Singleton<Profile>
 			}
 		}
 		CalcHighestWave();
-		if (highestUnlockedWave == 50 && HasWaveBeenCompleted(50))
+		// The campaign boundary is data-driven. The old hard-coded 50-wave
+		// check became stale when Kaizen changed the authored story length.
+		int finalStoryWave = maxBaseWave;
+		if (finalStoryWave > 0 && highestUnlockedWave == finalStoryWave &&
+			HasWaveBeenCompleted(finalStoryWave))
 		{
-			CurrentStoryWave = 51;
+			CurrentStoryWave = finalStoryWave + 1;
 		}
 		SingletonSpawningMonoBehaviour<GluiPersistentDataCache>.Instance.Save("coins", StringUtils.FormatAmountString(Singleton<Profile>.Instance.coins));
 		SingletonSpawningMonoBehaviour<GluiPersistentDataCache>.Instance.Save("revivePotion", StringUtils.FormatAmountString(Singleton<Profile>.Instance.GetNumPotions("revivePotion")));
