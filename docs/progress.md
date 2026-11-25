@@ -93,4 +93,4 @@
 - Overall estimate remains **10%**: this is a small reliability improvement; story expansion, endless, Unity migration and play verification are still unstarted/blocked.
 
 - Additional progression audit found a stale hard-coded save migration boundary at wave 50 in `Profile.PostLoadSyncing`. Replaced it with the configured play-mode `maxBaseWave`, so the migration follows the campaign length (10 now, planned 100) instead of an old original-game constant. This is a source change only; profile migration behavior is not runtime-tested.
-- Added a source-level check for the configured campaign boundary. The first CI run after that test file was corrected is still pending.
+- Added a source-level check for the configured campaign boundary. CI at `6bf4bfb` passed the five static regression checks and schema audit; this still does not prove runtime save behavior.
