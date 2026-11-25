@@ -80,3 +80,14 @@
 - Current branch CI commit `01def564`: **0 errors, 16 warnings**; 10 story waves, 10 command tables, 188 commands (171 spawns), 13 enemy IDs, one active hero. Warnings remain the missing endless/multiplayer/procedural records, inactive challenge roster references, legacy enemy groups, and incomplete rewards.
 - Android CI still reports success by skipping Unity and APK upload because `UNITY_LICENSE` is not configured. No Unity compile, device run or APK is claimed.
 - Commit: `01def564` scene marker audit, `8bd7a567` contiguous marker count correction. The endless research note is on this feature branch; the accidental default-branch documentation commit was removed immediately and verified absent at the branch tip (history retains the commits).
+
+
+## 2026-11-25 follow-up
+- Fixed a boundary bug in `WaveManager.SpawnRandomEnemy`: Unity integer `Random.Range` excludes its upper bound, so the prior `Count - 1` skipped the final pool entry. The method now guards a null/empty pool and selects over `[0, Count)`.
+- `SpawnLegendaryStrikeEnemy` now treats a null/empty legendary list as unavailable and falls back to the ordinary guarded pool.
+- `SpawnExtraEnemy` rejects null/empty IDs and skips failed enemy construction rather than adding a null character.
+- `ReplaceHelperWithEnemy` now leaves the original helper alive when the replacement cannot be constructed; previously it could destroy the helper after a failed spawn.
+- Added four source-level regression assertions in `scripts/test_wave_manager_safety.py`, wired into the license-free CI workflow. These checks verify the guard/bounds patterns only; they are **not** Unity compilation or runtime tests.
+- Commits: `f1df109` (random/empty pool guard), `97bc494` (invalid extra enemy ID guard), `d558afb` (source-level regression checks), `b83e519` (CI integration).
+- GitHub Actions for the new head `b83e519` were queued at the time of this log update; the earlier data audit at `97bc494` succeeded. The Android workflow still cannot run Unity without a legitimate `UNITY_LICENSE` secret and therefore produces no APK.
+- Overall estimate remains **10%**: this is a small reliability improvement; story expansion, endless, Unity migration and play verification are still unstarted/blocked.
