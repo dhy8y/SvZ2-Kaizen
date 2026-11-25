@@ -19,5 +19,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Check WaveManager spawn safety regressions
+        run: python scripts/test_wave_manager_safety.py
       - name: Validate authored waves and references
         run: python scripts/validate_kaizen_data.py
