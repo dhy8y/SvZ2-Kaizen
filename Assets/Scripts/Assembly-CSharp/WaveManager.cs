@@ -416,6 +416,11 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		if (!string.IsNullOrEmpty(text))
 		{
 			Enemy c = ConstructEnemyWithEffect(text, 0f, h.transform.position, true, corruptionSpawnEffect);
+			if (c == null)
+			{
+				Debug.LogWarning("Unable to replace helper '" + h.id + "' with enemy '" + text + "'. The helper will remain alive.");
+				return;
+			}
 			WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(c);
 			WeakGlobalInstance<CharactersManager>.Instance.DestroyCharacter(h);
 		}
@@ -473,16 +478,26 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public void SpawnRandomEnemy(Vector3 position, float spawnRange)
 	{
-		string cmd = mAllDifferentEnemies[UnityEngine.Random.Range(0, mAllDifferentEnemies.Count - 1)];
-		SpawnExtraEnemy(cmd, position, spawnRange);
+		if (mAllDifferentEnemies == null || mAllDifferentEnemies.Count == 0)
+		{
+			Debug.LogWarning("Cannot spawn a random enemy: this wave has no valid enemy pool.");
+			return;
+		}
+
+		// Random.Range's integer upper bound is exclusive. Using Count includes
+		// the final enemy in the pool (the old Count - 1 skipped it).
+		int index = UnityEngine.Random.Range(0, mAllDifferentEnemies.Count);
+		SpawnExtraEnemy(mAllDifferentEnemies[index], position, spawnRange);
 	}
 
 	public void SpawnLegendaryStrikeEnemy(Vector3 position, float spawnRange)
 	{
-		if (WeakGlobalMonoBehavior<InGameImpl>.Instance.LegendaryStrikeEnemies != null)
+		InGameImpl inGame = WeakGlobalMonoBehavior<InGameImpl>.Instance;
+		List<string> legendaryEnemies = inGame != null ? inGame.LegendaryStrikeEnemies : null;
+		if (legendaryEnemies != null && legendaryEnemies.Count > 0)
 		{
-			string cmd = WeakGlobalMonoBehavior<InGameImpl>.Instance.LegendaryStrikeEnemies[UnityEngine.Random.Range(0, WeakGlobalMonoBehavior<InGameImpl>.Instance.LegendaryStrikeEnemies.Count)];
-			SpawnExtraEnemy(cmd, position, spawnRange);
+			int index = UnityEngine.Random.Range(0, legendaryEnemies.Count);
+			SpawnExtraEnemy(legendaryEnemies[index], position, spawnRange);
 		}
 		else
 		{
@@ -503,7 +518,13 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		}
 		if (flag)
 		{
-			WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(ConstructEnemy(cmd, spawnRange, position, true));
+			Enemy enemy = ConstructEnemy(cmd, spawnRange, position, true);
+			if (enemy == null)
+			{
+				Debug.LogWarning("Unable to construct extra enemy '" + cmd + "'. It was skipped.");
+				return;
+			}
+			WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(enemy);
 		}
 	}
 
