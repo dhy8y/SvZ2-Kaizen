@@ -91,3 +91,6 @@
 - Commits: `f1df109` (random/empty pool guard), `97bc494` (invalid extra enemy ID guard), `d558afb` (source-level regression checks), `b83e519` (CI integration).
 - GitHub Actions for the new head `b83e519` were queued at the time of this log update; the earlier data audit at `97bc494` succeeded. The Android workflow still cannot run Unity without a legitimate `UNITY_LICENSE` secret and therefore produces no APK.
 - Overall estimate remains **10%**: this is a small reliability improvement; story expansion, endless, Unity migration and play verification are still unstarted/blocked.
+
+- Additional progression audit found a stale hard-coded save migration boundary at wave 50 in `Profile.PostLoadSyncing`. Replaced it with the configured play-mode `maxBaseWave`, so the migration follows the campaign length (10 now, planned 100) instead of an old original-game constant. This is a source change only; profile migration behavior is not runtime-tested.
+- Added a source-level check for the configured campaign boundary. The first CI run after that test file was corrected is still pending.
