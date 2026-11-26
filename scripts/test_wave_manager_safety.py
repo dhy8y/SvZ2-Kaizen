@@ -20,13 +20,13 @@ def method_body(method_name, source_text=TEXT):
         raise AssertionError(f"Method {method_name} was not found.")
     start = match.end() - 1
     depth = 0
-    for index in range(start, len(TEXT)):
-        if TEXT[index] == "{":
+    for index in range(start, len(source_text)):
+        if source_text[index] == "{":
             depth += 1
-        elif TEXT[index] == "}":
+        elif source_text[index] == "}":
             depth -= 1
             if depth == 0:
-                return TEXT[start:index + 1]
+                return source_text[start:index + 1]
     raise AssertionError(f"Method {method_name} has unbalanced braces.")
 
 
