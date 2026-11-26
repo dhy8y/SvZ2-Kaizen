@@ -125,8 +125,24 @@ public class WaveSpawnManager
 
 	public void QueueSpawns(WaveCommandSchema command)
 	{
-		string enemy = command.enemy.Key;
-		if (enemy == string.Empty) return;
+		if (command == null)
+		{
+			Debug.LogWarning("Cannot queue a null wave spawn command.");
+			return;
+		}
+
+		string enemy = DataBundleRecordKey.IsNullOrEmpty(command.enemy) ? string.Empty : command.enemy.Key;
+		if (string.IsNullOrEmpty(enemy))
+		{
+			Debug.LogWarning("Skipping a Spawn command without a direct enemy reference.");
+			return;
+		}
+
+		if (waveManager == null)
+		{
+			Debug.LogError("Cannot queue wave spawns because WaveManager is unavailable.");
+			return;
+		}
 
         if (mSpawnQueues.Count == 0 || command.simultaneous)
         {
@@ -141,7 +157,7 @@ public class WaveSpawnManager
 			spawnQueue.queue.Enqueue(new SpawnQueueItem(enemy, delay));
 		}
 
-		mQueueTimer.Set(waveManager.NextCommand.maxDelaySeconds);
+		mQueueTimer.Set(command.maxDelaySeconds);
 	}
 
     public void DelaySpawn(float duration)
