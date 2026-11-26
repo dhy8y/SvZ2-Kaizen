@@ -55,7 +55,10 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	private WaveCommandSchema mNextCommand
 	{
-		get { return !areCommandsDone ? waveRootData.Commands[mNextCommandIndex] : null; }
+		get
+		{
+			return !areCommandsDone ? waveRootData.Commands[mNextCommandIndex] : null;
+		}
 	}
 
 	public WaveCommandSchema NextCommand
@@ -79,12 +82,16 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public bool isDone
 	{
-		get { return mNextCommandIndex >= waveRootData.Commands.Length && specialBossName == string.Empty; }
+		get { return areCommandsDone && specialBossName == string.Empty; }
 	}
 
 	public bool areCommandsDone
 	{
-		get { return mNextCommandIndex >= waveRootData.Commands.Length; }
+		get
+		{
+			return waveRootData == null || waveRootData.Commands == null ||
+				mNextCommandIndex >= waveRootData.Commands.Length;
+		}
 	}
 
 	public bool isWaveComplete
@@ -200,7 +207,8 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		mNextCommandIndex = 0;
 		mEnemiesKilledSoFar = 0;
 
-		if (helperEnemySwaps.Length > 0)
+		HelperEnemySwapSchema[] swaps = helperEnemySwaps;
+		if (swaps != null && swaps.Length > 0)
 		{
 			corruptionSpawnEffect = ResourceCache.GetCachedResource("FX/Corrupt", 1).Resource as GameObject;
 		}
@@ -429,11 +437,18 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 	private void LoadData()
 	{
 		waveRootData = GetWaveData();
+		GetHelperSwapData();
+		if (waveRootData == null)
+		{
+			Debug.LogError("WaveManager could not load wave data for wave " + mWaveIndex + ". The wave will be treated as empty.");
+			mTutorial = string.Empty;
+			return;
+		}
+
 		string recordTable = Singleton<PlayModesManager>.Instance.selectedModeData.waves.RecordTable;
 		WaveRecordKey = DataBundleRuntime.TableRecordKey(recordTable, waveRootData.index.ToString());
 		Singleton<PlayStatistics>.Instance.data.shouldShowRateMeDialog = waveRootData.showRateMe;
 		Singleton<PlayStatistics>.Instance.data.shouldAwardMysteryBox = waveRootData.awardMysteryBox;
-		GetHelperSwapData();
 		mTutorial = waveRootData.tutorial;
 		if (!DataBundleRecordKey.IsNullOrEmpty(waveRootData.BossEnemy))
 		{
@@ -556,7 +571,13 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 			specialBossName = string.Empty;
 		}
 
-		if (mNextCommand == null) return;
+		if (areCommandsDone) return;
+		if (mNextCommand == null)
+		{
+			Debug.LogWarning("Skipping an invalid null wave command in wave " + mWaveIndex + ".");
+			mNextCommandIndex++;
+			return;
+		}
 
 		bool isEnemyHealthSufficientlyDepleted =
 			!mWaveSpawnManager.IsSpawning && mRemainingEnemyHealthPercent <= mNextCommand.spawnAtPercent;
@@ -697,21 +718,36 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 			}
 		}
 
+		if (waveRootData == null || waveRootData.Commands == null)
+		{
+			Debug.LogWarning("Wave has no command data; expected enemy count is zero.");
+			return;
+		}
+
 		for (int i = 0; i < waveRootData.Commands.Length; i++)
 		{
-			var mNextCommand = waveRootData.Commands[i];
+			var command = waveRootData.Commands[i];
+			if (command == null)
+			{
+				Debug.LogWarning("Skipping null wave command at index " + i + " in wave " + mWaveIndex + ".");
+				continue;
+			}
 
-			switch (mNextCommand.type)
+			switch (command.type)
 			{
 			case WaveCommandSchema.Type.Spawn:
-				mTotalNumEnemies += (mNextCommand.count > 1) ? mNextCommand.count : 1;
+				if (DataBundleRecordKey.IsNullOrEmpty(command.enemy))
+				{
+					Debug.LogWarning("Skipping unsupported Spawn command without a direct enemy in wave " + mWaveIndex + ".");
+				continue;
+				}
 
-				string enemy = mNextCommand.enemy.Key;
+				mTotalNumEnemies += (command.count > 1) ? command.count : 1;
+				string enemy = command.enemy.Key;
 				if (Singleton<EnemiesDatabase>.Instance.Contains(enemy) && !mAllDifferentEnemies.Exists((string element) => element == enemy))
 				{
 					mAllDifferentEnemies.Add(enemy);
 				}
-
 				break;
 			default: break;
 			}
