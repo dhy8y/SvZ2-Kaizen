@@ -10,10 +10,12 @@ import unittest
 
 SOURCE = Path(__file__).resolve().parents[1] / "Assets/Scripts/Assembly-CSharp/WaveManager.cs"
 TEXT = SOURCE.read_text(encoding="utf-8")
+SPAWN_SOURCE = Path(__file__).resolve().parents[1] / "Assets/Scripts/Assembly-CSharp/WaveSpawnManager.cs"
+SPAWN_TEXT = SPAWN_SOURCE.read_text(encoding="utf-8")
 
 
-def method_body(method_name):
-    match = re.search(r"\b(?:public|private|protected)\s+(?:static\s+)?void\s+" + re.escape(method_name) + r"\s*\([^)]*\)\s*\{", TEXT)
+def method_body(method_name, source_text=TEXT):
+    match = re.search(r"\b(?:public|private|protected)\s+(?:static\s+)?void\s+" + re.escape(method_name) + r"\s*\([^)]*\)\s*\{", source_text)
     if not match:
         raise AssertionError(f"Method {method_name} was not found.")
     start = match.end() - 1
@@ -56,7 +58,7 @@ class WaveManagerSpawnSafetyTests(unittest.TestCase):
         self.assertIn("return;", body[null_guard:destroy_helper])
 
     def test_spawn_queue_guards_missing_enemy_and_manager(self):
-        body = method_body("QueueSpawns")
+        body = method_body("QueueSpawns", SPAWN_TEXT)
         self.assertIn("if (command == null)", body)
         self.assertIn("DataBundleRecordKey.IsNullOrEmpty(command.enemy)", body)
         self.assertIn("if (waveManager == null)", body)
