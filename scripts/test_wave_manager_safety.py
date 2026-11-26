@@ -13,7 +13,7 @@ TEXT = SOURCE.read_text(encoding="utf-8")
 
 
 def method_body(method_name):
-    match = re.search(r"\bpublic\s+void\s+" + re.escape(method_name) + r"\s*\([^)]*\)\s*\{", TEXT)
+    match = re.search(r"\b(?:public|private|protected)\s+(?:static\s+)?void\s+" + re.escape(method_name) + r"\s*\([^)]*\)\s*\{", TEXT)
     if not match:
         raise AssertionError(f"Method {method_name} was not found.")
     start = match.end() - 1
@@ -54,6 +54,22 @@ class WaveManagerSpawnSafetyTests(unittest.TestCase):
         destroy_helper = body.index("DestroyCharacter(h)")
         self.assertLess(null_guard, destroy_helper)
         self.assertIn("return;", body[null_guard:destroy_helper])
+
+    def test_spawn_queue_guards_missing_enemy_and_manager(self):
+        body = method_body("QueueSpawns")
+        self.assertIn("if (command == null)", body)
+        self.assertIn("DataBundleRecordKey.IsNullOrEmpty(command.enemy)", body)
+        self.assertIn("if (waveManager == null)", body)
+        self.assertIn("mQueueTimer.Set(command.maxDelaySeconds);", body)
+
+    def test_wave_manager_handles_missing_wave_or_command_data(self):
+        next_command = re.search(r"private WaveCommandSchema mNextCommand\s*\{(.*?)\n\t\}", TEXT, re.S)
+        self.assertIsNotNone(next_command)
+        self.assertIn("areCommandsDone", next_command.group(1))
+        done = method_body("AnalyseWaveCommandsForStats")
+        self.assertIn("waveRootData == null || waveRootData.Commands == null", done)
+        self.assertIn("DataBundleRecordKey.IsNullOrEmpty(command.enemy)", done)
+        self.assertIn("Skipping an invalid null wave command", TEXT)
 
 
 PROFILE_SOURCE = Path(__file__).resolve().parents[1] / "Assets/Scripts/Assembly-CSharp/Profile.cs"
