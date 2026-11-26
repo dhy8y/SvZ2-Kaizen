@@ -1,9 +1,9 @@
 # Kaizen project progress
 
-**Snapshot:** 2026-11-24  
+**Snapshot:** 2026-11-26  
 **Feature branch:** `chatgpt/unity-2022-migration`  
 **Pull request:** [#1 — Prepare Unity 2022.3 Android migration](https://github.com/dhy8y/SvZ2-Kaizen/pull/1)  
-**Rough overall completion estimate:** 9% (not a measured metric; the project is still not playable or build-verified).
+**Rough overall completion estimate:** 10% (not a measured metric; the project is still not playable or build-verified).
 
 ## Completed this run
 - Added `scripts/validate_kaizen_data.py` and `.github/workflows/validate-data.yml`, a no-license static check of story-wave data.
@@ -94,3 +94,14 @@
 
 - Additional progression audit found a stale hard-coded save migration boundary at wave 50 in `Profile.PostLoadSyncing`. Replaced it with the configured play-mode `maxBaseWave`, so the migration follows the campaign length (10 now, planned 100) instead of an old original-game constant. This is a source change only; profile migration behavior is not runtime-tested.
 - Added a source-level check for the configured campaign boundary. CI at `6bf4bfb` passed the five static regression checks and schema audit; this still does not prove runtime save behavior.
+
+
+## 2026-11-26 malformed wave-data safety follow-up
+- `WaveManager` now handles an unavailable wave schema or null command array as an empty wave rather than dereferencing it. Null command records are skipped so a malformed table cannot permanently stop command progression.
+- Wave enemy-count analysis skips Spawn commands without a direct enemy reference (enemy-group commands are not implemented in the redesigned runtime), preventing a missing direct enemy key from causing a null dereference or leaving the expected count stuck.
+- `WaveSpawnManager.QueueSpawns` validates the command, direct enemy key and manager before queueing. It uses the command's own `maxDelaySeconds` instead of dereferencing `NextCommand`, keeping the delay associated with the command and safe when there is no following command.
+- Expanded source-level regression tests from 5 to 7 checks. The first run exposed a bug in the test helper (it searched the WaveManager file when testing WaveSpawnManager); fixed the helper and re-ran CI.
+- Final CI run on commit `62c2c42` passed **7 source-level regression tests** and the data audit (**0 errors, 16 warnings; 10 story waves, 188 commands / 171 spawns, 13 enemy IDs, 1 active hero**). [Run](https://github.com/dhy8y/SvZ2-Kaizen/actions/runs/45807636055)
+- Android workflow completed but skipped Unity compilation and APK upload because no legitimate `UNITY_LICENSE` secret is configured. No APK, Unity import, C# compilation, gameplay or device verification.
+- Commits: `0bf9c5f` wave-data guards; `7c78cb5` spawn-queue guards; `272cd00` tests; `a7f6b6f` test source-selection fix; `62c2c42` regression helper correction.
+- Estimate remains **10%**. This hardens failure behavior; it does not add campaign or endless content.
