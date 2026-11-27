@@ -125,3 +125,9 @@
 - Android workflow completed with a skip notice: Unity build and APK upload did not run because UNITY_LICENSE is not configured. [Android workflow](https://github.com/dhy8y/SvZ2-Kaizen/actions/runs/45988469387)
 - Commits from this run: d0defd3 (spawn area/dependency guards), 08b1ebb (tests), 37a8ae7 (serialized collider validation), 053c542 (next-wave hero guard), 13e36dc (regression test).
 - No Unity compilation, scene import, gameplay or device test is claimed. Overall estimate remains **10%**.
+
+
+## 2026-11-27 additional content-source check
+- Checked WaveSchema.txt in three public Kaizen forks (KojoBailey, bmjoy and Kolyn090): each still contains only the same 10 authored story records; none supplies additional campaign or endless data.
+- The author's separate SvZ2 Wave Editor repository is explicitly marked in-development with no releases. It confirms the new Kaizen-specific format is intentional, but is not yet a usable content source.
+- This strengthens the source-content blocker: do not fabricate 90 waves or silently convert original enemy groups. Continue with system reliability and prepare a reviewed wave authoring plan until verified content is available.
