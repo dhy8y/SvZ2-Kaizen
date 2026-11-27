@@ -627,6 +627,11 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public Enemy ConstructEnemy(string enemyId)
 	{
+		if (mEnemiesSpawnArea == null)
+		{
+			Debug.LogError("Cannot spawn enemy '" + enemyId + "': this stage has no enemiesSpawnArea collider.");
+			return null;
+		}
 		if (!Singleton<EnemiesDatabase>.Instance.Contains(enemyId))
 		{
 			return null;
@@ -650,7 +655,18 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	private Enemy SpawnEnemy(string uniqueId, CharacterData data, float sizeOfSpawnArea, Vector3 spawnPos, bool dynamicSpawn, GameObject effectToUse)
 	{
-		spawnPos.x = WeakGlobalInstance<CharactersManager>.Instance.GetBestSpawnXPos(spawnPos, sizeOfSpawnArea, data.lanePref, true, data.isFlying, data.bowAttackRange > 0f);
+		if (data == null)
+		{
+			Debug.LogError("Cannot spawn enemy '" + uniqueId + "': its CharacterData could not be loaded.");
+			return null;
+		}
+		CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+		if (charactersManager == null)
+		{
+			Debug.LogError("Cannot spawn enemy '" + uniqueId + "': CharactersManager is not initialized.");
+			return null;
+		}
+		spawnPos.x = charactersManager.GetBestSpawnXPos(spawnPos, sizeOfSpawnArea, data.lanePref, true, data.isFlying, data.bowAttackRange > 0f);
 		Enemy enemy = new Enemy(data, mZTarget, spawnPos, 1);
 		data.Setup(enemy);
 		enemy.maxHealth *= mLevelMultipliers.enemiesHealth;
