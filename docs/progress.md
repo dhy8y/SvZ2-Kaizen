@@ -116,3 +116,12 @@
 - Android CI again completed by skipping Unity and APK upload because no legitimate UNITY_LICENSE secret is configured. No Unity import/compile, gameplay test or APK.
 - Commits: d0defd3 spawn-area/runtime-manager guards; 08b1ebb regression tests; 37a8ae7 scene collider validation.
 - Estimate remains **10%**. Reliability work only; campaign/endless content and Unity migration remain unbuilt.
+
+
+## 2026-11-27 validation complete
+- The scene collider audit passed on commit 37a8ae7: the story scenes readable by CI have non-zero local BoxCollider references for both spawn-area fields. The validator does not import scenes into Unity.
+- Hardened Profile.GoToNextWave: it no longer dereferences a missing wave schema or empty recommendedHero key when advancing; it logs a warning and preserves the current hero selection.
+- Added a regression assertion for the progression guard. Latest CI at commit 13e36dc passed **10 source-level tests**, and static data audit passed (**0 errors / 16 warnings; 10 story waves, 188 commands / 171 spawns, 13 enemy IDs, 1 active hero**). [Validation run](https://github.com/dhy8y/SvZ2-Kaizen/actions/runs/45988476452)
+- Android workflow completed with a skip notice: Unity build and APK upload did not run because UNITY_LICENSE is not configured. [Android workflow](https://github.com/dhy8y/SvZ2-Kaizen/actions/runs/45988469387)
+- Commits from this run: d0defd3 (spawn area/dependency guards), 08b1ebb (tests), 37a8ae7 (serialized collider validation), 053c542 (next-wave hero guard), 13e36dc (regression test).
+- No Unity compilation, scene import, gameplay or device test is claimed. Overall estimate remains **10%**.
