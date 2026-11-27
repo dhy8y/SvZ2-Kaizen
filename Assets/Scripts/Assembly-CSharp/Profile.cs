@@ -2007,7 +2007,15 @@ public class Profile : Singleton<Profile>
 		IncrementWaveCompletionCount(CurrentStoryWave);
 		CurrentStoryWave++;
 		SetIsWaveUnlocked(CurrentStoryWave, true);
-		CurrentHeroId = WaveManager.GetWaveData(CurrentStoryWave, waveTypeToPlay).recommendedHero.Key;
+		WaveSchema nextWaveData = WaveManager.GetWaveData(CurrentStoryWave, waveTypeToPlay);
+		if (nextWaveData != null && !DataBundleRecordKey.IsNullOrEmpty(nextWaveData.recommendedHero))
+		{
+			CurrentHeroId = nextWaveData.recommendedHero.Key;
+		}
+		else
+		{
+			Debug.LogWarning("Next wave has no valid recommended hero; keeping the current hero selection.");
+		}
 
 		var wavePlayed = Singleton<PlayStatistics>.Instance.data.wavePlayed;
 		if (HasWaveBeenCompleted(wavePlayed))
