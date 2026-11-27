@@ -15,7 +15,7 @@ SPAWN_TEXT = SPAWN_SOURCE.read_text(encoding="utf-8")
 
 
 def method_body(method_name, source_text=TEXT):
-    match = re.search(r"\b(?:public|private|protected)\s+(?:static\s+)?void\s+" + re.escape(method_name) + r"\s*\([^)]*\)\s*\{", source_text)
+    match = re.search(r"\b(?:public|private|protected)\s+(?:static\s+)?[\w<>\[\]]+\s+" + re.escape(method_name) + r"\s*\([^)]*\)\s*\{", source_text)
     if not match:
         raise AssertionError(f"Method {method_name} was not found.")
     start = match.end() - 1
@@ -56,6 +56,18 @@ class WaveManagerSpawnSafetyTests(unittest.TestCase):
         destroy_helper = body.index("DestroyCharacter(h)")
         self.assertLess(null_guard, destroy_helper)
         self.assertIn("return;", body[null_guard:destroy_helper])
+
+    def test_construct_enemy_checks_missing_spawn_area(self):
+        body = method_body("ConstructEnemy")
+        self.assertIn("if (mEnemiesSpawnArea == null)", body)
+        self.assertLess(body.index("if (mEnemiesSpawnArea == null)"), body.index("mEnemiesSpawnArea.size.x"))
+        self.assertIn("return null;", body)
+
+    def test_enemy_construction_checks_character_data_and_manager(self):
+        body = method_body("SpawnEnemy")
+        self.assertIn("if (data == null)", body)
+        self.assertIn("if (charactersManager == null)", body)
+        self.assertLess(body.index("if (data == null)"), body.index("new Enemy(data"))
 
     def test_spawn_queue_guards_missing_enemy_and_manager(self):
         body = method_body("QueueSpawns", SPAWN_TEXT)
