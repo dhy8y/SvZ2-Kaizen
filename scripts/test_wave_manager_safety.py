@@ -91,7 +91,7 @@ PROFILE_TEXT = PROFILE_SOURCE.read_text(encoding="utf-8")
 
 
 def profile_method_body(method_name):
-    match = re.search(r"\bpublic\s+void\s+" + re.escape(method_name) + r"\s*\([^)]*\)\s*\{", PROFILE_TEXT)
+    match = re.search(r"\bpublic\s+[\w<>\[\]]+\s+" + re.escape(method_name) + r"\s*\([^)]*\)\s*\{", PROFILE_TEXT)
     if not match:
         raise AssertionError(f"Profile method {method_name} was not found.")
     start = match.end() - 1
@@ -113,6 +113,12 @@ class ProfileProgressionSourceTests(unittest.TestCase):
         self.assertIn("CurrentStoryWave = finalStoryWave + 1;", body)
         self.assertNotRegex(body, r"highestUnlockedWave\s*==\s*50")
 
+
+    def test_next_wave_keeps_current_hero_when_recommendation_is_missing(self):
+        body = profile_method_body("GoToNextWave")
+        self.assertIn("WaveSchema nextWaveData = WaveManager.GetWaveData", body)
+        self.assertIn("nextWaveData != null && !DataBundleRecordKey.IsNullOrEmpty(nextWaveData.recommendedHero)", body)
+        self.assertIn("keeping the current hero selection", body)
 
 if __name__ == "__main__":
     unittest.main()
