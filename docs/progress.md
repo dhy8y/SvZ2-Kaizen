@@ -22,7 +22,7 @@
 ## Remaining blockers / next work
 1. Obtain a legitimate Unity license and configure it privately in GitHub Actions repository secrets; never paste it into chat.
 2. Perform the Unity 2022.3 migration/import and resolve package/API/build errors using the Unity Editor/CI.
-3. Inspect scene gate markers, especially the large scene files that cannot be retrieved through the current connector.
+3. CI statically checks gate markers and both spawn-area BoxCollider references for all scenes referenced by the currently authored story waves; non-story scenes remain unaudited, and no Unity scene import/runtime test has been done.
 4. Finish the reward collection/banking path and wire safe authored wave rewards only after their intended values are reviewed.
 5. Rebuild missing endless tables with a separate endless progression, scaling and periodic bosses. Do not use a repeat-the-last-story-wave fallback as the finished mode.
 6. Design/adapt the missing story waves to reach 100 without fabricating author-authored content or blindly copying original enemy stats/commands.
