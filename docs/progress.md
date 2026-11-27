@@ -105,3 +105,14 @@
 - Android workflow completed but skipped Unity compilation and APK upload because no legitimate `UNITY_LICENSE` secret is configured. No APK, Unity import, C# compilation, gameplay or device verification.
 - Commits: `0bf9c5f` wave-data guards; `7c78cb5` spawn-queue guards; `272cd00` tests; `a7f6b6f` test source-selection fix; `62c2c42` regression helper correction.
 - Estimate remains **10%**. This hardens failure behavior; it does not add campaign or endless content.
+
+
+## 2026-11-27 spawn-construction hardening
+- WaveManager.ConstructEnemy(string) now checks that the active stage has an enemiesSpawnArea collider before reading its size/position. A missing collider logs a clear error and returns null; the spawn manager's existing failed-spawn accounting lets the wave progress instead of crashing.
+- SpawnEnemy now checks loaded CharacterData and CharactersManager before using them. Missing runtime dependencies fail cleanly and return null.
+- Added two source-level regression checks for these guards; the method extractor now supports non-void C# return types.
+- Expanded the static scene audit to inspect serialized enemiesSpawnAreaRight and helpersSpawnAreaLeft references, requiring non-zero local BoxCollider (Unity class ID 65) references when scene text is available. If a scene cannot be read by the static checker, it emits a warning rather than pretending it was inspected.
+- CI on commit 08b1ebbb passed **9 source-level checks** and the data audit (**0 errors / 16 warnings; 10 story waves, 188 commands / 171 spawns, 13 enemy IDs, 1 active hero**). Validation run: https://github.com/dhy8y/SvZ2-Kaizen/actions/runs/45988159903. The follow-up scene-collider audit commit 37a8ae7 is awaiting CI at this update.
+- Android CI again completed by skipping Unity and APK upload because no legitimate UNITY_LICENSE secret is configured. No Unity import/compile, gameplay test or APK.
+- Commits: d0defd3 spawn-area/runtime-manager guards; 08b1ebb regression tests; 37a8ae7 scene collider validation.
+- Estimate remains **10%**. Reliability work only; campaign/endless content and Unity migration remain unbuilt.
