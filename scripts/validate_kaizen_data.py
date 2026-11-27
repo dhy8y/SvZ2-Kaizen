@@ -96,6 +96,7 @@ daily_schedule = records(procedural_selection_sections.get("DailyChallengeSchedu
 scene_paths = {p.stem: p for p in (ROOT / "Assets" / "Scenes").rglob("*.unity")}
 scene_names = set(scene_paths)
 scene_gate_markers = {}
+scene_text_cache = {}
 wave_refs = []
 wave_enemy_refs = []
 wave_group_refs = []
@@ -109,10 +110,21 @@ for wave_id, wave in waves.items():
     elif scene:
         scene_path = scene_paths[scene]
         if scene not in scene_gate_markers:
-            scene_text = scene_path.read_text(encoding="utf-8", errors="replace")
+            scene_text_cache[scene] = scene_path.read_text(encoding="utf-8", errors="replace")
+            scene_text = scene_text_cache[scene]
             scene_gate_markers[scene] = sorted(set(int(marker) for marker in re.findall(
                 r"m_Name:\s*RGatePosition([0-9]+)", scene_text)))
+        scene_text = scene_text_cache[scene]
         markers = scene_gate_markers[scene]
+        if not scene_text:
+            warn(f"Story scene '{scene}' is unreadable/empty to the static validator; scene wiring could not be inspected.")
+        else:
+            for field in ("enemiesSpawnAreaRight", "helpersSpawnAreaLeft"):
+                field_match = re.search(rf"^\s*{field}:\s*\{{fileID:\s*(\d+)", scene_text, re.M)
+                if not field_match or field_match.group(1) == "0":
+                    fail(f"Story scene '{scene}' has no serialized BoxCollider reference for '{field}'.")
+                elif not re.search(rf"^--- !u!65 &{field_match.group(1)}\s*$", scene_text, re.M):
+                    fail(f"Story scene '{scene}' field '{field}' does not reference a local BoxCollider (class ID 65).")
         if not markers:
             warn(f"Story scene '{scene}' contains no serialized RGatePosition markers; gate movement will be disabled.")
         elif markers != list(range(1, markers[-1] + 1)):
