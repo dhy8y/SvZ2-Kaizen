@@ -139,3 +139,6 @@
 - Added four source-level regression assertions covering these paths. CI is pending; these assertions do not prove Unity compilation or runtime behavior.
 - Commits: `627e587` (WaveManager registration guards), `559e6d7` (spawn-queue manager guard), `d8afb24` (regression checks).
 - No new campaign/endless data. Unity migration and APK remain blocked by missing Unity license/editor verification. Estimate remains 10%.
+
+- Initial regression run failed one test because the helper selected the nested timer's `Update()` instead of WaveSpawnManager's update. The test was corrected to anchor extraction at the outer class; rerun is pending. This is a test harness correction, not a gameplay code rollback.
+- Test fix commit: `10dbd17`.
