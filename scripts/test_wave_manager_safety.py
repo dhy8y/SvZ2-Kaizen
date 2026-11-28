@@ -85,6 +85,40 @@ class WaveManagerSpawnSafetyTests(unittest.TestCase):
         self.assertIn("DataBundleRecordKey.IsNullOrEmpty(command.enemy)", done)
         self.assertIn("Skipping an invalid null wave command", TEXT)
 
+    def test_helper_replacement_checks_manager_before_constructing_or_destroying(self):
+        body = method_body("ReplaceHelperWithEnemy")
+        manager_check = body.index("if (charactersManager == null)")
+        construct = body.index("ConstructEnemyWithEffect")
+        add_character = body.index("charactersManager.AddCharacter(c)")
+        destroy_helper = body.index("charactersManager.DestroyCharacter(h)")
+        self.assertLess(manager_check, construct)
+        self.assertLess(add_character, destroy_helper)
+        self.assertIn("helper will remain alive", body[manager_check:construct])
+
+    def test_extra_spawn_checks_manager_before_registration(self):
+        body = method_body("SpawnExtraEnemy")
+        manager_check = body.index("if (charactersManager == null)")
+        construct = body.index("ConstructEnemy(cmd")
+        add_character = body.index("charactersManager.AddCharacter(enemy)")
+        self.assertLess(manager_check, construct)
+        self.assertLess(construct, add_character)
+
+    def test_boss_spawn_guards_manager_and_keeps_count_nonnegative(self):
+        body = method_body("Update")
+        self.assertIn("charactersManager != null ? ConstructEnemy(specialBossName) : null", body)
+        self.assertIn("charactersManager.AddCharacter(boss)", body)
+        self.assertIn("Mathf.Max(0, mTotalNumEnemies - 1)", body)
+
+    def test_spawn_queue_update_handles_missing_managers_before_add(self):
+        body = method_body("Update", SPAWN_TEXT)
+        manager_check = body.index("else if (charactersManager == null)")
+        construct = body.index("currentWaveManager.ConstructEnemy")
+        add_character = body.index("charactersManager.AddCharacter(enemy)")
+        self.assertLess(manager_check, construct)
+        self.assertLess(construct, add_character)
+        self.assertIn("currentWaveManager == null", body)
+        self.assertIn("Mathf.Max(0, currentWaveManager.totalEnemies - 1)", body)
+
 
 PROFILE_SOURCE = Path(__file__).resolve().parents[1] / "Assets/Scripts/Assembly-CSharp/Profile.cs"
 PROFILE_TEXT = PROFILE_SOURCE.read_text(encoding="utf-8")
