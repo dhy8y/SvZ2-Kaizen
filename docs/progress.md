@@ -131,3 +131,11 @@
 - Checked WaveSchema.txt in three public Kaizen forks (KojoBailey, bmjoy and Kolyn090): each still contains only the same 10 authored story records; none supplies additional campaign or endless data.
 - The author's separate SvZ2 Wave Editor repository is explicitly marked in-development with no releases. It confirms the new Kaizen-specific format is intentional, but is not yet a usable content source.
 - This strengthens the source-content blocker: do not fabricate 90 waves or silently convert original enemy groups. Continue with system reliability and prepare a reviewed wave authoring plan until verified content is available.
+
+
+## 2026-11-28 wave registration safety follow-up
+- Guarded WaveManager helper-replacement, extra-enemy, and authored-boss registration paths against a missing CharactersManager; failed helper replacement preserves the helper, and failed boss registration decrements the expected count without going negative.
+- WaveSpawnManager now checks both the WaveManager and CharactersManager before queued enemy registration and decrements expected spawn count safely if the manager is missing.
+- Added four source-level regression assertions covering these paths. CI is pending; these assertions do not prove Unity compilation or runtime behavior.
+- Commits: `627e587` (WaveManager registration guards), `559e6d7` (spawn-queue manager guard), `d8afb24` (regression checks).
+- No new campaign/endless data. Unity migration and APK remain blocked by missing Unity license/editor verification. Estimate remains 10%.
