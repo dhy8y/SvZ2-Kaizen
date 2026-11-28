@@ -423,14 +423,21 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		}
 		if (!string.IsNullOrEmpty(text))
 		{
+			CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+			if (charactersManager == null)
+			{
+				Debug.LogWarning("Unable to replace helper '" + h.id + "': CharactersManager is unavailable. The helper will remain alive.");
+				return;
+			}
+
 			Enemy c = ConstructEnemyWithEffect(text, 0f, h.transform.position, true, corruptionSpawnEffect);
 			if (c == null)
 			{
 				Debug.LogWarning("Unable to replace helper '" + h.id + "' with enemy '" + text + "'. The helper will remain alive.");
 				return;
 			}
-			WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(c);
-			WeakGlobalInstance<CharactersManager>.Instance.DestroyCharacter(h);
+			charactersManager.AddCharacter(c);
+			charactersManager.DestroyCharacter(h);
 		}
 	}
 
@@ -538,13 +545,20 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		}
 		if (flag)
 		{
+			CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+			if (charactersManager == null)
+			{
+				Debug.LogWarning("Unable to spawn extra enemy '" + cmd + "': CharactersManager is unavailable.");
+				return;
+			}
+
 			Enemy enemy = ConstructEnemy(cmd, spawnRange, position, true);
 			if (enemy == null)
 			{
 				Debug.LogWarning("Unable to construct extra enemy '" + cmd + "'. It was skipped.");
 				return;
 			}
-			WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(enemy);
+			charactersManager.AddCharacter(enemy);
 		}
 	}
 
@@ -557,16 +571,17 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		// Bosses are held until every regular spawn queue has finished.
 		if (areCommandsDone && !mWaveSpawnManager.IsSpawning && !string.IsNullOrEmpty(specialBossName))
 		{
-			Enemy boss = ConstructEnemy(specialBossName);
+			CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+			Enemy boss = charactersManager != null ? ConstructEnemy(specialBossName) : null;
 			if (boss != null)
 			{
-				WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(boss);
+				charactersManager.AddCharacter(boss);
 				FlashBanner("Boss");
 			}
 			else
 			{
-				Debug.LogError("Unable to spawn wave boss '" + specialBossName + "'. Check the EnemySchema entry and resources.");
-				mTotalNumEnemies--;
+				Debug.LogError("Unable to spawn wave boss '" + specialBossName + "'. Check EnemySchema, resources, and CharactersManager.");
+				mTotalNumEnemies = Mathf.Max(0, mTotalNumEnemies - 1);
 			}
 			specialBossName = string.Empty;
 		}
