@@ -110,8 +110,9 @@ class WaveManagerSpawnSafetyTests(unittest.TestCase):
         self.assertIn("Mathf.Max(0, mTotalNumEnemies - 1)", body)
 
     def test_spawn_queue_update_handles_missing_managers_before_add(self):
-        body = method_body("Update", SPAWN_TEXT)
-        manager_check = body.index("else if (charactersManager == null)")
+        outer_update_start = SPAWN_TEXT.index("public void Update()", SPAWN_TEXT.index("public class WaveSpawnManager"))
+        body = method_body("Update", SPAWN_TEXT[outer_update_start:])
+        manager_check = body.index("else if (charactersManager == null")
         construct = body.index("currentWaveManager.ConstructEnemy")
         add_character = body.index("charactersManager.AddCharacter(enemy)")
         self.assertLess(manager_check, construct)
