@@ -142,3 +142,9 @@
 
 - Initial regression run failed one test because the helper selected the nested timer's `Update()` instead of WaveSpawnManager's update. The test was corrected to anchor extraction at the outer class; rerun is pending. This is a test harness correction, not a gameplay code rollback.
 - Test fix commit: `10dbd17`.
+
+## 2026-11-28 reward-path guard
+- `AddSpecialRewardsToCollectables` now validates wave data, Profile, unlock state and CollectableManager before granting the two currently supported resources (copper coins and pachinko balls). Missing manager warns instead of dereferencing null.
+- This does not restore the unsupported reward/present fields; no reward balance/data was changed.
+- Added a source-level assertion for the reward path. CI is pending; not Unity-compiled.
+- Commit: `415d84b` (guard), `7170db1` (test).
