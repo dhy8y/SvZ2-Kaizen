@@ -99,8 +99,34 @@ public class WaveSpawnManager
 
             if (queueItem.enemy != string.Empty)
             {
-                var enemy = waveManager.ConstructEnemy(queueItem.enemy);
-                WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(enemy);
+                WaveManager currentWaveManager = waveManager;
+                CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+                if (currentWaveManager == null)
+                {
+                    Debug.LogError("Unable to spawn enemy '" + queueItem.enemy + "': WaveManager is unavailable.");
+                }
+                else if (charactersManager == null)
+                {
+                    // The queued spawn cannot be registered. Reduce the expected count
+                    // so a missing runtime manager does not leave the wave unfinished.
+                    currentWaveManager.totalEnemies = Mathf.Max(0, currentWaveManager.totalEnemies - 1);
+                    Debug.LogError("Unable to spawn enemy '" + queueItem.enemy + "': CharactersManager is unavailable.");
+                }
+                else
+                {
+                    var enemy = currentWaveManager.ConstructEnemy(queueItem.enemy);
+                    if (enemy != null)
+                    {
+                        charactersManager.AddCharacter(enemy);
+                    }
+                    else
+                    {
+                        // Keep the wave completable if a data bundle references a missing
+                        // enemy or its prefab cannot be constructed.
+                        currentWaveManager.totalEnemies = Mathf.Max(0, currentWaveManager.totalEnemies - 1);
+                        Debug.LogError("Unable to spawn enemy '" + queueItem.enemy + "'. Check EnemySchema and character resources.");
+                    }
+                }
             }
 
             spawnQueue.timer.Set(queueItem.delay);
@@ -115,8 +141,24 @@ public class WaveSpawnManager
 
 	public void QueueSpawns(WaveCommandSchema command)
 	{
-		string enemy = command.enemy.Key;
-		if (enemy == string.Empty) return;
+		if (command == null)
+		{
+			Debug.LogWarning("Cannot queue a null wave spawn command.");
+			return;
+		}
+
+		string enemy = DataBundleRecordKey.IsNullOrEmpty(command.enemy) ? string.Empty : command.enemy.Key;
+		if (string.IsNullOrEmpty(enemy))
+		{
+			Debug.LogWarning("Skipping a Spawn command without a direct enemy reference.");
+			return;
+		}
+
+		if (waveManager == null)
+		{
+			Debug.LogError("Cannot queue wave spawns because WaveManager is unavailable.");
+			return;
+		}
 
         if (mSpawnQueues.Count == 0 || command.simultaneous)
         {
@@ -131,7 +173,7 @@ public class WaveSpawnManager
 			spawnQueue.queue.Enqueue(new SpawnQueueItem(enemy, delay));
 		}
 
-		mQueueTimer.Set(waveManager.NextCommand.maxDelaySeconds);
+		mQueueTimer.Set(command.maxDelaySeconds);
 	}
 
     public void DelaySpawn(float duration)

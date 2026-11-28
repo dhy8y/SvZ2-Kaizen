@@ -1,0 +1,377 @@
+#!/usr/bin/env python3
+"""Static sanity checks for Kaizen's authored wave data (no Unity/license required)."""
+from pathlib import Path
+import re
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+BUNDLE = ROOT / "DataBundles" / "English"
+WAVE_FILE = BUNDLE / "WaveSchema.txt"
+COMMAND_FILE = BUNDLE / "WaveCommandSchema.txt"
+ENEMY_FILE = BUNDLE / "EnemySchema.txt"
+HERO_FILE = BUNDLE / "HeroSchema.txt"
+REWARD_FILE = BUNDLE / "WaveRewardSchema.txt"
+PLAYMODE_FILE = BUNDLE / "PlayModeSchema.txt"
+GROUP_FILE = BUNDLE / "EnemyGroupSchema.txt"
+PROCEDURAL_FILE = BUNDLE / "ProceduralWaveSchema.txt"
+PROCEDURAL_LIST_FILE = BUNDLE / "ProceduralWaveListSchema.txt"
+PROCEDURAL_SELECTION_FILE = BUNDLE / "ProceduralWaveSelectionSchema.txt"
+HERO_LIST_FILE = BUNDLE / "HeroListSchema.txt"
+HELPER_LIST_FILE = BUNDLE / "HelperListSchema.txt"
+HELPER_FILE = BUNDLE / "HelperSchema.txt"
+
+errors = []
+warnings = []
+
+def fail(message):
+    errors.append(message)
+
+def warn(message):
+    warnings.append(message)
+
+def sections(text):
+    result = {}
+    current = None
+    buf = []
+    for line in text.splitlines():
+        match = re.match(r"^\[([^]]+)\]\s*$", line)
+        if match:
+            if current is not None:
+                result[current] = "\n".join(buf)
+            current = match.group(1)
+            buf = []
+        elif current is not None:
+            buf.append(line)
+    if current is not None:
+        result[current] = "\n".join(buf)
+    return result
+
+def records(section):
+    """Parse simple DataBundle record headings and key=value fields."""
+    result = {}
+    current = None
+    for line in section.splitlines():
+        match = re.match(r"^\s{1,8}([A-Za-z0-9_]+):\s*$", line)
+        if match:
+            current = match.group(1)
+            result.setdefault(current, {})
+            continue
+        field = re.match(r"^\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$", line)
+        if field and current is not None:
+            result[current][field.group(1)] = field.group(2)
+    return result
+
+def read_required(path):
+    if not path.is_file():
+        fail(f"Missing required schema file: {path.relative_to(ROOT)}")
+        return ""
+    return path.read_text(encoding="utf-8-sig")
+
+wave_sections = sections(read_required(WAVE_FILE))
+command_sections = sections(read_required(COMMAND_FILE))
+enemy_sections = sections(read_required(ENEMY_FILE))
+hero_sections = sections(read_required(HERO_FILE))
+reward_sections = sections(read_required(REWARD_FILE))
+playmode_sections = sections(read_required(PLAYMODE_FILE))
+group_sections = sections(read_required(GROUP_FILE))
+procedural_sections = sections(read_required(PROCEDURAL_FILE))
+procedural_list_sections = sections(read_required(PROCEDURAL_LIST_FILE))
+procedural_selection_sections = sections(read_required(PROCEDURAL_SELECTION_FILE))
+hero_list_sections = sections(read_required(HERO_LIST_FILE))
+helper_list_sections = sections(read_required(HELPER_LIST_FILE))
+helper_sections = sections(read_required(HELPER_FILE))
+
+waves = records(wave_sections.get("Waves", ""))
+commands = {name: section for name, section in command_sections.items()}
+enemies = {rec.get("id", key) for key, rec in records(enemy_sections.get("Enemies", "")).items()}
+heroes = {rec.get("id", key) for key, rec in records(hero_sections.get("Heroes", "")).items()}
+reward_defs = records(reward_sections.get("Reward_Table", ""))
+reward_records = set(reward_defs)
+play_modes = records(playmode_sections.get("PlayModes", ""))
+procedural_records = records(procedural_sections.get("DailyChallenges", ""))
+active_helpers = {rec.get("id", key) for key, rec in records(helper_sections.get("Helpers", "")).items()}
+daily_schedule = records(procedural_selection_sections.get("DailyChallengeSchedule", ""))
+
+
+scene_paths = {p.stem: p for p in (ROOT / "Assets" / "Scenes").rglob("*.unity")}
+scene_names = set(scene_paths)
+scene_gate_markers = {}
+scene_text_cache = {}
+wave_refs = []
+wave_enemy_refs = []
+wave_group_refs = []
+for wave_id, wave in waves.items():
+    commands_name = wave.get("commands", "")
+    if commands_name and commands_name not in commands:
+        fail(f"Wave {wave_id}: command table '{commands_name}' is missing.")
+    scene = wave.get("scene", "")
+    if scene and scene not in scene_names:
+        fail(f"Wave {wave_id}: scene '{scene}' is missing under Assets/Scenes.")
+    elif scene:
+        scene_path = scene_paths[scene]
+        if scene not in scene_gate_markers:
+            scene_text_cache[scene] = scene_path.read_text(encoding="utf-8", errors="replace")
+            scene_text = scene_text_cache[scene]
+            scene_gate_markers[scene] = sorted(set(int(marker) for marker in re.findall(
+                r"m_Name:\s*RGatePosition([0-9]+)", scene_text)))
+        scene_text = scene_text_cache[scene]
+        markers = scene_gate_markers[scene]
+        if not scene_text:
+            warn(f"Story scene '{scene}' is unreadable/empty to the static validator; scene wiring could not be inspected.")
+        else:
+            for field in ("enemiesSpawnAreaRight", "helpersSpawnAreaLeft"):
+                field_match = re.search(rf"^\s*{field}:\s*\{{fileID:\s*(\d+)", scene_text, re.M)
+                if not field_match or field_match.group(1) == "0":
+                    fail(f"Story scene '{scene}' has no serialized BoxCollider reference for '{field}'.")
+                elif not re.search(rf"^--- !u!65 &{field_match.group(1)}\s*$", scene_text, re.M):
+                    fail(f"Story scene '{scene}' field '{field}' does not reference a local BoxCollider (class ID 65).")
+        if not markers:
+            warn(f"Story scene '{scene}' contains no serialized RGatePosition markers; gate movement will be disabled.")
+        elif markers != list(range(1, markers[-1] + 1)):
+            warn(f"Story scene '{scene}' has non-contiguous RGatePosition markers: {markers}. InGameImpl stops at the first missing marker.")
+    hero = wave.get("recommendedHero", "")
+    if hero.startswith("Heroes."):
+        hero = hero.split(".", 1)[1]
+    if hero and hero not in heroes:
+        fail(f"Wave {wave_id}: recommended hero '{hero}' is not in HeroSchema.")
+    boss = wave.get("BossEnemy", "")
+    if boss.startswith("Enemies."):
+        boss = boss.split(".", 1)[1]
+    if boss and boss not in enemies:
+        fail(f"Wave {wave_id}: boss '{boss}' is not in EnemySchema.")
+    reward = wave.get("rewards", "")
+    if reward.startswith("Reward_Table."):
+        reward = reward.split(".", 1)[1]
+    if reward and reward not in reward_records:
+        fail(f"Wave {wave_id}: reward record '{reward}' is missing.")
+    wave_refs.append(commands_name)
+
+    if commands_name in commands:
+        for enemy in re.findall(r"^\s*enemy\s*=\s*Enemies\.([A-Za-z0-9_]+)\s*$", commands[commands_name], re.M):
+            wave_enemy_refs.append(enemy)
+            if enemy not in enemies:
+                fail(f"Wave {wave_id}/{commands_name}: enemy '{enemy}' is not in EnemySchema.")
+        if re.search(r"^\s*enemyGroup\s*=", commands[commands_name], re.M):
+            wave_group_refs.append(commands_name)
+            warn(f"{commands_name} uses enemyGroup; current WaveSpawnManager queues only direct enemy fields.")
+
+# Validate mode references, but preserve warnings for intentionally unfinished multiplayer/endless tables.
+for mode, fields in play_modes.items():
+    base = fields.get("waves", "")
+    if base and base not in wave_sections:
+        warn(f"Play mode '{mode}' references missing wave table '{base}'.")
+    for field in ("endlessWaves", "endlessBonusWaves"):
+        table = fields.get(field, "")
+        if table and table not in wave_sections:
+            warn(f"Play mode '{mode}' references missing {field} table '{table}' (endless mode data is unfinished).")
+    try:
+        maximum = int(fields.get("maxBaseWave", "0"))
+    except ValueError:
+        fail(f"Play mode '{mode}' has a non-integer maxBaseWave.")
+        continue
+    if base == "Waves" and maximum > len(waves):
+        fail(f"Play mode '{mode}' maxBaseWave={maximum}, but only {len(waves)} story records exist.")
+
+# Audit every Kaizen command table, not just the ten story tables.
+def command_records(section):
+    parsed = []
+    current = None
+    for line in section.splitlines():
+        heading = re.match(r"^\s*(?:\*|[0-9]+):\s*$", line)
+        if heading:
+            if current is not None:
+                parsed.append(current)
+            current = {}
+            continue
+        field = re.match(r"^\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$", line)
+        if field and current is not None:
+            current[field.group(1)] = field.group(2)
+    if current is not None:
+        parsed.append(current)
+    return parsed
+
+valid_command_types = {"", "Default", "Spawn", "Delay", "Banner", "MoveGate", "Tutorial"}
+total_command_records = 0
+total_spawn_commands = 0
+for command_name, section in commands.items():
+    parsed_commands = command_records(section)
+    total_command_records += len(parsed_commands)
+    if not parsed_commands:
+        warn(f"Command table '{command_name}' has no parseable commands.")
+    for command_index, command in enumerate(parsed_commands, 1):
+        command_type = command.get("type", "")
+        if command_type not in valid_command_types:
+            fail(f"{command_name} command {command_index}: unsupported type '{command_type}'.")
+        enemy_ref = command.get("enemy", "")
+        if enemy_ref:
+            if not enemy_ref.startswith("Enemies."):
+                fail(f"{command_name} command {command_index}: malformed enemy reference '{enemy_ref}'.")
+            else:
+                enemy_id = enemy_ref.split(".", 1)[1]
+                if enemy_id not in enemies:
+                    fail(f"{command_name} command {command_index}: enemy '{enemy_id}' is missing from EnemySchema.")
+        group_ref = command.get("enemyGroup", "")
+        if command_type == "Spawn" and not enemy_ref and not group_ref:
+            fail(f"{command_name} command {command_index}: Spawn has neither an enemy nor an enemyGroup.")
+        if group_ref and group_ref not in group_sections:
+            warn(f"{command_name} command {command_index}: enemy group table '{group_ref}' is missing.")
+        if command_type == "Spawn":
+            total_spawn_commands += 1
+            try:
+                spawn_count = int(command.get("count", "0") or "0")
+                if spawn_count <= 0:
+                    fail(f"{command_name} command {command_index}: Spawn count must be greater than zero.")
+            except ValueError:
+                fail(f"{command_name} command {command_index}: Spawn count is not an integer.")
+        if command_type == "Delay":
+            try:
+                delay = float(command.get("duration", "0") or "0")
+                if delay < 0:
+                    fail(f"{command_name} command {command_index}: Delay duration cannot be negative.")
+            except ValueError:
+                fail(f"{command_name} command {command_index}: Delay duration is not numeric.")
+
+# Compare story MoveGate commands with the serialized marker counts in their scenes.
+gate_position_indices = {"Close": 0, "Middle": 1, "Far": 2}
+for wave_id, wave in waves.items():
+    scene_name = wave.get("scene", "")
+    command_name = wave.get("commands", "")
+    if scene_name not in scene_gate_markers or command_name not in commands:
+        continue
+    markers = scene_gate_markers[scene_name]
+    marker_count = 0
+    while marker_count + 1 in markers:
+        marker_count += 1
+    for command_index, command in enumerate(command_records(commands[command_name]), 1):
+        if command.get("type") != "MoveGate":
+            continue
+        gate_position = command.get("gatePos", "Close")
+        if gate_position not in gate_position_indices:
+            warn(f"Wave {wave_id}/{command_name} command {command_index}: unknown gate position '{gate_position}'.")
+        elif gate_position_indices[gate_position] >= marker_count:
+            warn(f"Wave {wave_id}/{command_name} command {command_index}: '{gate_position}' needs marker index {gate_position_indices[gate_position]}, but scene '{scene_name}' has {marker_count} contiguous marker(s). WaveManager clamps this position.")
+
+# Audit daily challenge schedules, waves and valid selectable hero/helper records.
+missing_challenge_waves = set()
+missing_hero_pool_challenges = set()
+no_active_hero_challenges = set()
+inactive_hero_ids = set()
+missing_helper_pool_challenges = set()
+inactive_helper_ids = set()
+
+for schedule_id, schedule in daily_schedule.items():
+    pool_name = schedule.get("proceduralWavePool", "")
+    if not pool_name:
+        warn(f"DailyChallengeSchedule '{schedule_id}' has no proceduralWavePool.")
+        continue
+    if pool_name not in procedural_list_sections:
+        warn(f"DailyChallengeSchedule '{schedule_id}' references missing pool '{pool_name}'.")
+        continue
+    pool_records = records(procedural_list_sections[pool_name])
+    if not pool_records:
+        warn(f"Daily challenge pool '{pool_name}' is empty.")
+    for pool_record_id, pool_record in pool_records.items():
+        challenge_ref = pool_record.get("proceduralWave", "")
+        if not challenge_ref.startswith("DailyChallenges."):
+            warn(f"Daily challenge pool '{pool_name}/{pool_record_id}' has invalid reference '{challenge_ref}'.")
+            continue
+        challenge_id = challenge_ref.split(".", 1)[1]
+        if challenge_id not in procedural_records:
+            warn(f"Daily challenge pool '{pool_name}/{pool_record_id}' references missing challenge '{challenge_id}'.")
+
+for challenge_id, challenge in procedural_records.items():
+    if challenge.get("disabled", "False").lower() == "true":
+        continue
+    wave_ref = challenge.get("wave", "")
+    if wave_ref:
+        table_name, _, record_id = wave_ref.partition(".")
+        if table_name not in wave_sections or (record_id and record_id not in records(wave_sections.get(table_name, ""))):
+            missing_challenge_waves.add(challenge_id)
+    hero_table = challenge.get("possibleHeroes", "")
+    if not hero_table or hero_table not in hero_list_sections:
+        missing_hero_pool_challenges.add(challenge_id)
+        no_active_hero_challenges.add(challenge_id)
+    else:
+        hero_entries = records(hero_list_sections[hero_table])
+        valid_hero_count = 0
+        for hero_key, hero_entry in hero_entries.items():
+            hero_ref = hero_entry.get("hero", f"Heroes.{hero_key}")
+            hero_id = hero_ref.split(".", 1)[1] if hero_ref.startswith("Heroes.") else hero_ref
+            if hero_id in heroes:
+                valid_hero_count += 1
+            else:
+                inactive_hero_ids.add(hero_id)
+        if valid_hero_count == 0:
+            no_active_hero_challenges.add(challenge_id)
+    helper_table = challenge.get("possibleHelpers", "")
+    if not helper_table or helper_table not in helper_list_sections:
+        missing_helper_pool_challenges.add(challenge_id)
+    else:
+        for helper_key, helper_entry in records(helper_list_sections[helper_table]).items():
+            helper_ref = helper_entry.get("ability", f"Helpers.{helper_key}")
+            helper_id = helper_ref.split(".", 1)[1] if helper_ref.startswith("Helpers.") else helper_ref
+            if helper_id not in active_helpers:
+                inactive_helper_ids.add(helper_id)
+
+if missing_challenge_waves:
+    warn("Enabled daily challenges reference missing wave records: " + ", ".join(sorted(missing_challenge_waves)) + ".")
+if missing_hero_pool_challenges:
+    warn("Enabled daily challenges have missing hero-list tables: " + ", ".join(sorted(missing_hero_pool_challenges)) + ".")
+if no_active_hero_challenges:
+    warn("Enabled daily challenges have no currently enabled hero choice: " + ", ".join(sorted(no_active_hero_challenges)) + ".")
+if inactive_hero_ids:
+    warn("Daily challenge hero lists reference inactive/missing heroes: " + ", ".join(sorted(inactive_hero_ids)) + ".")
+if missing_helper_pool_challenges:
+    warn("Enabled daily challenges have missing helper-list tables: " + ", ".join(sorted(missing_helper_pool_challenges)) + ".")
+if inactive_helper_ids:
+    warn("Daily challenge helper lists reference inactive/missing helpers: " + ", ".join(sorted(inactive_helper_ids)) + ".")
+
+# Aggregate legacy group mismatches to keep CI output readable.
+group_missing_ids = set()
+group_missing_slots = 0
+for group_section in group_sections.values():
+    for group in records(group_section).values():
+        for slot in ("enemy_1", "enemy_2", "enemy_3"):
+            enemy_ref = group.get(slot, "")
+            if enemy_ref.startswith("Enemies."):
+                enemy_id = enemy_ref.split(".", 1)[1]
+                if enemy_id not in enemies:
+                    group_missing_ids.add(enemy_id)
+                    group_missing_slots += 1
+if group_missing_ids:
+    warn(f"Legacy enemy groups contain {group_missing_slots} missing enemy-reference slots across " +
+         f"{len(group_missing_ids)} IDs: " + ", ".join(sorted(group_missing_ids)[:15]) +
+         (" ..." if len(group_missing_ids) > 15 else ""))
+
+# WaveRewardSchema has data, but the current story records do not assign any rewards.
+assigned_reward_ids = set()
+for wave in waves.values():
+    reward = wave.get("rewards", "")
+    if reward.startswith("Reward_Table."):
+        assigned_reward_ids.add(reward.split(".", 1)[1])
+unused_rewards = sorted(reward_records - assigned_reward_ids)
+if unused_rewards:
+    warn(f"{len(unused_rewards)} WaveRewardSchema records are not assigned to any current story wave.")
+unsupported_reward_fields = {"souls", "revive", "power", "luck", "friendship", "wealth", "haste", "peace", "tea", "sushi"}
+unsupported_reward_values = sorted({
+    field for definition in reward_defs.values()
+    for field in unsupported_reward_fields
+    if definition.get(field, "0").strip() not in ("", "0", "False", "NULL")
+})
+if unsupported_reward_values:
+    warn("Reward data contains values outside the currently processed coins/pachinkoBalls: " +
+         ", ".join(unsupported_reward_values) + " (reward collection/banking code is unfinished).")
+
+if not waves:
+    fail("No authored [Waves] records found.")
+print(f"Kaizen static data audit: {len(waves)} story waves, {len(commands)} command tables / {total_command_records} commands ({total_spawn_commands} spawns), {len(enemies)} enemy IDs, {len(heroes)} active hero record(s).")
+if errors:
+    print("\nERRORS:")
+    for item in errors:
+        print(f"  - {item}")
+if warnings:
+    print("\nWARNINGS (unfinished/legacy references; not a story-wave failure):")
+    for item in warnings:
+        print(f"  - {item}")
+print(f"\nResult: {len(errors)} error(s), {len(warnings)} warning(s).")
+sys.exit(1 if errors else 0)

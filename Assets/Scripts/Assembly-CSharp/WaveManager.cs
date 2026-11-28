@@ -55,7 +55,10 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	private WaveCommandSchema mNextCommand
 	{
-		get { return !areCommandsDone ? waveRootData.Commands[mNextCommandIndex] : null; }
+		get
+		{
+			return !areCommandsDone ? waveRootData.Commands[mNextCommandIndex] : null;
+		}
 	}
 
 	public WaveCommandSchema NextCommand
@@ -79,12 +82,16 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public bool isDone
 	{
-		get { return mNextCommandIndex >= waveRootData.Commands.Length && specialBossName == string.Empty; }
+		get { return areCommandsDone && specialBossName == string.Empty; }
 	}
 
 	public bool areCommandsDone
 	{
-		get { return mNextCommandIndex >= waveRootData.Commands.Length; }
+		get
+		{
+			return waveRootData == null || waveRootData.Commands == null ||
+				mNextCommandIndex >= waveRootData.Commands.Length;
+		}
 	}
 
 	public bool isWaveComplete
@@ -180,6 +187,17 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 		LoadData();
 
+		if (Singleton<Profile>.Instance.MultiplayerData.IsMultiplayerGameSessionActive())
+		{
+			int level = Singleton<Profile>.Instance.MultiplayerData.MultiplayerGameSessionData.defensiveBuffs[0];
+			string text = SpecialBossName(level);
+			if (text != string.Empty)
+			{
+				Singleton<EnemiesDatabase>.Instance.LoadInGameData(text);
+				specialBossName = text;
+			}
+		}
+
 		AnalyseWaveCommandsForStats();
 
 		if (mEnemyGateGroup != null)
@@ -189,18 +207,8 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		mNextCommandIndex = 0;
 		mEnemiesKilledSoFar = 0;
 
-		if (Singleton<Profile>.Instance.MultiplayerData.IsMultiplayerGameSessionActive())
-		{
-			int level = Singleton<Profile>.Instance.MultiplayerData.MultiplayerGameSessionData.defensiveBuffs[0];
-			string text = SpecialBossName(level);
-			if (text != string.Empty)
-			{
-				Singleton<EnemiesDatabase>.Instance.LoadInGameData(text);
-				allDifferentEnemies.Add(text);
-			}
-		}
-
-		if (helperEnemySwaps.Length > 0)
+		HelperEnemySwapSchema[] swaps = helperEnemySwaps;
+		if (swaps != null && swaps.Length > 0)
 		{
 			corruptionSpawnEffect = ResourceCache.GetCachedResource("FX/Corrupt", 1).Resource as GameObject;
 		}
@@ -208,13 +216,25 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public void MoveGate(int index)
 	{
+		if (mEnemyGateGroup == null || mEnemyGateZPositions == null || mEnemyGateZPositions.Count == 0)
+		{
+			Debug.LogWarning("Cannot move the enemy gate: this stage has no configured RGatePosition markers.");
+			return;
+		}
+
+		int safeIndex = Mathf.Clamp(index, 0, mEnemyGateZPositions.Count - 1);
+		if (safeIndex != index)
+		{
+			Debug.LogWarning("Enemy gate position " + index + " is not configured in this stage. Using position " + safeIndex + " instead.");
+		}
+
 		mEnemyGateGroup.transform.position = new Vector3(
 			mEnemyGateGroup.transform.position.x,
 			mEnemyGateGroup.transform.position.y,
-			mEnemyGateZPositions[index]
+			mEnemyGateZPositions[safeIndex]
 		);
 
-		rightConstraint = mEnemyGateZPositions[index];
+		rightConstraint = mEnemyGateZPositions[safeIndex];
 	}
 
 	public static string SpecialBossName(int level)
@@ -243,12 +263,21 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public void AddSpecialRewardsToCollectables()
 	{
-		if (waveRootData.Rewards == null || !Singleton<Profile>.Instance.GetIsWaveUnlocked(mWaveIndex))
+		Profile profile = Singleton<Profile>.Instance;
+		if (waveRootData == null || waveRootData.Rewards == null || profile == null ||
+			!profile.GetIsWaveUnlocked(mWaveIndex))
 			return;
 
+		CollectableManager collectableManager = WeakGlobalInstance<CollectableManager>.Instance;
+		if (collectableManager == null)
+		{
+			Debug.LogWarning("Cannot grant wave rewards: CollectableManager is unavailable.");
+			return;
+		}
+
 		// [TODO] support all coin types
-		WeakGlobalInstance<CollectableManager>.Instance.GiveResource(ECollectableType.copperCoin, waveRootData.Rewards.coins);
-		WeakGlobalInstance<CollectableManager>.Instance.GiveResource(ECollectableType.pachinkoBall, waveRootData.Rewards.pachinkoBalls);
+		collectableManager.GiveResource(ECollectableType.copperCoin, waveRootData.Rewards.coins);
+		collectableManager.GiveResource(ECollectableType.pachinkoBall, waveRootData.Rewards.pachinkoBalls);
 		// WeakGlobalInstance<CollectableManager>.Instance.GiveSpecificPresent("revivePotion", waveRootData.Rewards.revive);
 		// WeakGlobalInstance<CollectableManager>.Instance.GiveSpecificPresent("power", waveRootData.Rewards.power);
 		// WeakGlobalInstance<CollectableManager>.Instance.GiveSpecificPresent("luck", waveRootData.Rewards.luck);
@@ -264,6 +293,11 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 	{
 		Singleton<Profile>.Instance.ClearBonusWaveData();
 		WaveSchema waveData = GetWaveData(Singleton<Profile>.Instance.WaveToPlay, Singleton<Profile>.Instance.waveTypeToPlay);
+		if (waveData == null || string.IsNullOrEmpty(waveData.scene))
+		{
+			Debug.LogError("Cannot launch the selected wave: its data or scene reference is unavailable.");
+			return;
+		}
 		LoadingScreen.LoadLevel(waveData.scene);
 	}
 
@@ -293,9 +327,16 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		case WaveType.Wave_DailyChallenge:
 		{
 			ProceduralWaveSchema dailyChallengeProceduralWaveSchema = Singleton<Profile>.Instance.dailyChallengeProceduralWaveSchema;
+			if (dailyChallengeProceduralWaveSchema == null)
+			{
+				Debug.LogWarning("Daily challenge wave data has not been initialized.");
+				return null;
+			}
 			WaveSchema cachedWaveSchema = dailyChallengeProceduralWaveSchema.CachedWaveSchema;
 			if (cachedWaveSchema == null)
 			{
+				Debug.LogWarning("Daily challenge has no valid cached wave data.");
+				return null;
 			}
 			return cachedWaveSchema;
 		}
@@ -316,14 +357,28 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 						break;
 					}
 					SeededRandomizer randomizer = new SeededRandomizer(num);
+					int endlessWaveCount = DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), selectedModeData.endlessWaves);
+					int endlessBossWaveCount = DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), selectedModeData.endlessBonusWaves);
+
+					// Kaizen currently ships without the endless tables referenced by
+					// PlayModeSchema. Do not modulo by zero: fall back to the nearest
+					// authored story wave until those tables are supplied.
+					if (selectedModeData.bonusWaveInterval <= 0 || endlessWaveCount <= 0 ||
+						(num % selectedModeData.bonusWaveInterval == 0 && endlessBossWaveCount <= 0))
+					{
+						Debug.LogError("Endless wave data is missing or invalid for play mode '" + selectedModeData.id + "'. Falling back to the previous authored wave.");
+						num--;
+						continue;
+					}
+
 					if (num % selectedModeData.bonusWaveInterval == 0)
 					{
-						int num2 = num / selectedModeData.bonusWaveInterval % DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), selectedModeData.endlessBonusWaves) + 1;
+						int num2 = num / selectedModeData.bonusWaveInterval % endlessBossWaveCount + 1;
 						waveSchema = WaveSchema.Initialize(DataBundleRuntime.TableRecordKey(selectedModeData.endlessBonusWaves.RecordTable, num2.ToString()), randomizer);
 					}
 					else
 					{
-						int num3 = (num - 1) % DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), selectedModeData.endlessWaves) + 1;
+						int num3 = (num - 1) % endlessWaveCount + 1;
 						waveSchema = WaveSchema.Initialize(DataBundleRuntime.TableRecordKey(selectedModeData.endlessWaves.RecordTable, num3.ToString()), randomizer);
 					}
 					break;
@@ -377,21 +432,44 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		}
 		if (!string.IsNullOrEmpty(text))
 		{
+			CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+			if (charactersManager == null)
+			{
+				Debug.LogWarning("Unable to replace helper '" + h.id + "': CharactersManager is unavailable. The helper will remain alive.");
+				return;
+			}
+
 			Enemy c = ConstructEnemyWithEffect(text, 0f, h.transform.position, true, corruptionSpawnEffect);
-			WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(c);
-			WeakGlobalInstance<CharactersManager>.Instance.DestroyCharacter(h);
+			if (c == null)
+			{
+				Debug.LogWarning("Unable to replace helper '" + h.id + "' with enemy '" + text + "'. The helper will remain alive.");
+				return;
+			}
+			charactersManager.AddCharacter(c);
+			charactersManager.DestroyCharacter(h);
 		}
 	}
 
 	private void LoadData()
 	{
 		waveRootData = GetWaveData();
+		GetHelperSwapData();
+		if (waveRootData == null)
+		{
+			Debug.LogError("WaveManager could not load wave data for wave " + mWaveIndex + ". The wave will be treated as empty.");
+			mTutorial = string.Empty;
+			return;
+		}
+
 		string recordTable = Singleton<PlayModesManager>.Instance.selectedModeData.waves.RecordTable;
 		WaveRecordKey = DataBundleRuntime.TableRecordKey(recordTable, waveRootData.index.ToString());
 		Singleton<PlayStatistics>.Instance.data.shouldShowRateMeDialog = waveRootData.showRateMe;
 		Singleton<PlayStatistics>.Instance.data.shouldAwardMysteryBox = waveRootData.awardMysteryBox;
-		GetHelperSwapData();
 		mTutorial = waveRootData.tutorial;
+		if (!DataBundleRecordKey.IsNullOrEmpty(waveRootData.BossEnemy))
+		{
+			specialBossName = waveRootData.BossEnemy.Key;
+		}
 		mVillageArchersLevel = waveRootData.villageArchers;
 		mBellLevel = waveRootData.bell;
 		LoadLevelMultipliers();
@@ -431,16 +509,26 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public void SpawnRandomEnemy(Vector3 position, float spawnRange)
 	{
-		string cmd = mAllDifferentEnemies[UnityEngine.Random.Range(0, mAllDifferentEnemies.Count - 1)];
-		SpawnExtraEnemy(cmd, position, spawnRange);
+		if (mAllDifferentEnemies == null || mAllDifferentEnemies.Count == 0)
+		{
+			Debug.LogWarning("Cannot spawn a random enemy: this wave has no valid enemy pool.");
+			return;
+		}
+
+		// Random.Range's integer upper bound is exclusive. Using Count includes
+		// the final enemy in the pool (the old Count - 1 skipped it).
+		int index = UnityEngine.Random.Range(0, mAllDifferentEnemies.Count);
+		SpawnExtraEnemy(mAllDifferentEnemies[index], position, spawnRange);
 	}
 
 	public void SpawnLegendaryStrikeEnemy(Vector3 position, float spawnRange)
 	{
-		if (WeakGlobalMonoBehavior<InGameImpl>.Instance.LegendaryStrikeEnemies != null)
+		InGameImpl inGame = WeakGlobalMonoBehavior<InGameImpl>.Instance;
+		List<string> legendaryEnemies = inGame != null ? inGame.LegendaryStrikeEnemies : null;
+		if (legendaryEnemies != null && legendaryEnemies.Count > 0)
 		{
-			string cmd = WeakGlobalMonoBehavior<InGameImpl>.Instance.LegendaryStrikeEnemies[UnityEngine.Random.Range(0, WeakGlobalMonoBehavior<InGameImpl>.Instance.LegendaryStrikeEnemies.Count)];
-			SpawnExtraEnemy(cmd, position, spawnRange);
+			int index = UnityEngine.Random.Range(0, legendaryEnemies.Count);
+			SpawnExtraEnemy(legendaryEnemies[index], position, spawnRange);
 		}
 		else
 		{
@@ -450,6 +538,11 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public void SpawnExtraEnemy(string cmd, Vector3 position, float spawnRange)
 	{
+		if (string.IsNullOrEmpty(cmd) || mAllDifferentEnemies == null)
+		{
+			return;
+		}
+
 		bool flag = false;
 		foreach (string mAllDifferentEnemy in mAllDifferentEnemies)
 		{
@@ -461,7 +554,20 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 		}
 		if (flag)
 		{
-			WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(ConstructEnemy(cmd, spawnRange, position, true));
+			CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+			if (charactersManager == null)
+			{
+				Debug.LogWarning("Unable to spawn extra enemy '" + cmd + "': CharactersManager is unavailable.");
+				return;
+			}
+
+			Enemy enemy = ConstructEnemy(cmd, spawnRange, position, true);
+			if (enemy == null)
+			{
+				Debug.LogWarning("Unable to construct extra enemy '" + cmd + "'. It was skipped.");
+				return;
+			}
+			charactersManager.AddCharacter(enemy);
 		}
 	}
 
@@ -471,7 +577,31 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 		mWaveSpawnManager.Update();
 
-		if (mNextCommand == null) return;
+		// Bosses are held until every regular spawn queue has finished.
+		if (areCommandsDone && !mWaveSpawnManager.IsSpawning && !string.IsNullOrEmpty(specialBossName))
+		{
+			CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+			Enemy boss = charactersManager != null ? ConstructEnemy(specialBossName) : null;
+			if (boss != null)
+			{
+				charactersManager.AddCharacter(boss);
+				FlashBanner("Boss");
+			}
+			else
+			{
+				Debug.LogError("Unable to spawn wave boss '" + specialBossName + "'. Check EnemySchema, resources, and CharactersManager.");
+				mTotalNumEnemies = Mathf.Max(0, mTotalNumEnemies - 1);
+			}
+			specialBossName = string.Empty;
+		}
+
+		if (areCommandsDone) return;
+		if (mNextCommand == null)
+		{
+			Debug.LogWarning("Skipping an invalid null wave command in wave " + mWaveIndex + ".");
+			mNextCommandIndex++;
+			return;
+		}
 
 		bool isEnemyHealthSufficientlyDepleted =
 			!mWaveSpawnManager.IsSpawning && mRemainingEnemyHealthPercent <= mNextCommand.spawnAtPercent;
@@ -521,6 +651,11 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public Enemy ConstructEnemy(string enemyId)
 	{
+		if (mEnemiesSpawnArea == null)
+		{
+			Debug.LogError("Cannot spawn enemy '" + enemyId + "': this stage has no enemiesSpawnArea collider.");
+			return null;
+		}
 		if (!Singleton<EnemiesDatabase>.Instance.Contains(enemyId))
 		{
 			return null;
@@ -544,7 +679,18 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	private Enemy SpawnEnemy(string uniqueId, CharacterData data, float sizeOfSpawnArea, Vector3 spawnPos, bool dynamicSpawn, GameObject effectToUse)
 	{
-		spawnPos.x = WeakGlobalInstance<CharactersManager>.Instance.GetBestSpawnXPos(spawnPos, sizeOfSpawnArea, data.lanePref, true, data.isFlying, data.bowAttackRange > 0f);
+		if (data == null)
+		{
+			Debug.LogError("Cannot spawn enemy '" + uniqueId + "': its CharacterData could not be loaded.");
+			return null;
+		}
+		CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+		if (charactersManager == null)
+		{
+			Debug.LogError("Cannot spawn enemy '" + uniqueId + "': CharactersManager is not initialized.");
+			return null;
+		}
+		spawnPos.x = charactersManager.GetBestSpawnXPos(spawnPos, sizeOfSpawnArea, data.lanePref, true, data.isFlying, data.bowAttackRange > 0f);
 		Enemy enemy = new Enemy(data, mZTarget, spawnPos, 1);
 		data.Setup(enemy);
 		enemy.maxHealth *= mLevelMultipliers.enemiesHealth;
@@ -600,28 +746,48 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	private void AnalyseWaveCommandsForStats()
 	{
-		var multiplayerData = Singleton<Profile>.Instance.MultiplayerData;
-		mTotalNumEnemies = (multiplayerData.IsMultiplayerGameSessionActive() && multiplayerData.MultiplayerGameSessionData.defensiveBuffs[0] > 0)
-			? 1
-			: 0;
-		
+		mTotalNumEnemies = 0;
 		mAllDifferentEnemies.Clear();
+
+		if (!string.IsNullOrEmpty(specialBossName))
+		{
+			mTotalNumEnemies++;
+			if (Singleton<EnemiesDatabase>.Instance.Contains(specialBossName))
+			{
+				mAllDifferentEnemies.Add(specialBossName);
+			}
+		}
+
+		if (waveRootData == null || waveRootData.Commands == null)
+		{
+			Debug.LogWarning("Wave has no command data; expected enemy count is zero.");
+			return;
+		}
 
 		for (int i = 0; i < waveRootData.Commands.Length; i++)
 		{
-			var mNextCommand = waveRootData.Commands[i];
+			var command = waveRootData.Commands[i];
+			if (command == null)
+			{
+				Debug.LogWarning("Skipping null wave command at index " + i + " in wave " + mWaveIndex + ".");
+				continue;
+			}
 
-			switch (mNextCommand.type)
+			switch (command.type)
 			{
 			case WaveCommandSchema.Type.Spawn:
-				mTotalNumEnemies += (mNextCommand.count > 1) ? mNextCommand.count : 1;
+				if (DataBundleRecordKey.IsNullOrEmpty(command.enemy))
+				{
+					Debug.LogWarning("Skipping unsupported Spawn command without a direct enemy in wave " + mWaveIndex + ".");
+				continue;
+				}
 
-				string enemy = mNextCommand.enemy.Key;
+				mTotalNumEnemies += (command.count > 1) ? command.count : 1;
+				string enemy = command.enemy.Key;
 				if (Singleton<EnemiesDatabase>.Instance.Contains(enemy) && !mAllDifferentEnemies.Exists((string element) => element == enemy))
 				{
 					mAllDifferentEnemies.Add(enemy);
 				}
-
 				break;
 			default: break;
 			}

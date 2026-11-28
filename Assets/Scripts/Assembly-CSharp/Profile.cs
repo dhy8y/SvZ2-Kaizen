@@ -873,20 +873,58 @@ public class Profile : Singleton<Profile>
 		}
 	}
 
-	private void RefreshDailyChallengeHero()
+	private bool HasValidDailyChallengeHeroPool(ProceduralWaveSchema challenge)
+	{
+		if (challenge == null || challenge.possibleHeroes == null ||
+			string.IsNullOrEmpty(challenge.possibleHeroes.RecordTable))
+		{
+			return false;
+		}
+
+		foreach (string recordKey in DataBundleRuntime.Instance.EnumerateRecordKeys(
+			typeof(HeroListSchema), challenge.possibleHeroes.RecordTable))
+		{
+			string heroId = DataBundleRuntime.RecordKey(recordKey);
+			if (Singleton<HeroesDatabase>.Instance[heroId] != null)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private bool RefreshDailyChallengeHero()
 	{
 		DataBundleRecordTable possibleHeroes = dailyChallengeProceduralWaveSchema.possibleHeroes;
 		List<string> list = new List<string>(5);
-		foreach (string item2 in DataBundleRuntime.Instance.EnumerateRecordKeys(typeof(HeroListSchema), possibleHeroes.RecordTable))
+		if (possibleHeroes == null || string.IsNullOrEmpty(possibleHeroes.RecordTable))
+		{
+			return false;
+		}
+
+		foreach (string item2 in DataBundleRuntime.Instance.EnumerateRecordKeys(
+			typeof(HeroListSchema), possibleHeroes.RecordTable))
 		{
 			string item = DataBundleRuntime.RecordKey(item2);
-			list.Add(item);
+			if (Singleton<HeroesDatabase>.Instance[item] != null)
+			{
+				list.Add(item);
+			}
 		}
-		int count = list.Count;
-		int index = dailyRandomizer.NextRange(0, count - 1, this);
+		if (list.Count == 0)
+		{
+			return false;
+		}
+
+		int index = dailyRandomizer.NextRange(0, list.Count - 1, this);
 		string id = list[index];
 		dailyChallengeHeroSchema = Singleton<HeroesDatabase>.Instance[id];
+		if (dailyChallengeHeroSchema == null)
+		{
+			return false;
+		}
 		CurrentHeroId = dailyChallengeHeroSchema.id;
+		return true;
 	}
 
 	private void RefreshDailyChallengeHelpers()
@@ -901,10 +939,18 @@ public class Profile : Singleton<Profile>
 		}
 		DataBundleRecordTable possibleHelpers = dailyChallengeProceduralWaveSchema.possibleHelpers;
 		List<string> list = new List<string>(10);
+		if (possibleHelpers == null || string.IsNullOrEmpty(possibleHelpers.RecordTable))
+		{
+			return;
+		}
 		foreach (string item2 in DataBundleRuntime.Instance.EnumerateRecordKeys(typeof(HelperListSchema), possibleHelpers.RecordTable))
 		{
 			string text = DataBundleRuntime.RecordKey(item2);
 			HelperSchema helperSchema = Singleton<HelpersDatabase>.Instance[text];
+			if (helperSchema == null)
+			{
+				continue;
+			}
 			DataBundleRecordKey requiredHero = helperSchema.requiredHero;
 			if (DataBundleRecordKey.IsNullOrEmpty(requiredHero) || DataBundleRuntime.RecordKey(requiredHero) == dailyChallengeHeroSchema.id)
 			{
@@ -931,6 +977,11 @@ public class Profile : Singleton<Profile>
 			{
 				string id = dailyChallengeHelpers[num2];
 				HelperSchema helperSchema2 = Singleton<HelpersDatabase>.Instance[id];
+				if (helperSchema2 == null)
+				{
+					dailyChallengeHelpers.RemoveAt(num2);
+					continue;
+				}
 				DataBundleRecordKey upgradeAlliesFrom = helperSchema2.upgradeAlliesFrom;
 				bool flag = !DataBundleRecordKey.IsNullOrEmpty(upgradeAlliesFrom);
 				BuffSchema buffSchema = helperSchema2.buffSchema;
@@ -1005,6 +1056,15 @@ public class Profile : Singleton<Profile>
 		return CurrentTime.DayOfYear;
 	}
 
+	private void ClearDailyChallengeData()
+	{
+		dailyChallengeProceduralWaveSchema = null;
+		dailyChallengeHeroSchema = null;
+		dailyChallengeHelpers = null;
+		dailyChallengeAbilities = null;
+		dailyRandomizer = null;
+	}
+
 	public void RefreshDailyChallenge()
 	{
 		if (mRefreshingDailyChallenge)
@@ -1012,68 +1072,116 @@ public class Profile : Singleton<Profile>
 			return;
 		}
 		mRefreshingDailyChallenge = true;
-		if (Singleton<Profile>.Instance.waveTypeToPlay == WaveManager.WaveType.Wave_DailyChallenge)
+		if (Singleton<Profile>.Instance.waveTypeToPlay != WaveManager.WaveType.Wave_DailyChallenge)
 		{
-			int dailyChallengeDaysSinceStart = GetDailyChallengeDaysSinceStart();
-			if (dailyRandomizer == null || dailyRandomizer.seed != dailyChallengeDaysSinceStart)
+			ClearDailyChallengeData();
+			mRefreshingDailyChallenge = false;
+			return;
+		}
+
+		int dailyChallengeDaysSinceStart = GetDailyChallengeDaysSinceStart();
+		if (dailyRandomizer != null && dailyRandomizer.seed == dailyChallengeDaysSinceStart)
+		{
+			mRefreshingDailyChallenge = false;
+			return;
+		}
+
+		ClearDailyChallengeData();
+		DataBundleRecordTable proceduralWaves = new DataBundleRecordTable("ProceduralWaves");
+		if (DataBundleRuntime.Instance.GetRecordTableLength(typeof(WaveSchema), proceduralWaves) <= 0)
+		{
+			Debug.LogWarning("Daily challenge unavailable: the ProceduralWaves table is missing or empty.");
+			mRefreshingDailyChallenge = false;
+			return;
+		}
+
+		dailyRandomizer = new SeededRandomizer(dailyChallengeDaysSinceStart);
+		dailyRandomizer.PushRandomSession(this);
+		DateTime currentTime = CurrentTime;
+		int month = currentTime.Month;
+		int day = currentTime.Day;
+		DataBundleRecordTable dataBundleRecordTable = new DataBundleRecordTable("DailyChallengeSchedule");
+		ProceduralWaveSelectionSchema proceduralWaveSelectionSchema = null;
+		foreach (ProceduralWaveSelectionSchema item in dataBundleRecordTable.EnumerateRecords<ProceduralWaveSelectionSchema>())
+		{
+			int num = DynamicEnum.ToIndex(item.startMonth);
+			if (num >= 0)
 			{
-				dailyRandomizer = new SeededRandomizer(dailyChallengeDaysSinceStart);
-				dailyRandomizer.PushRandomSession(this);
-				DateTime currentTime = CurrentTime;
-				int month = currentTime.Month;
-				int day = currentTime.Day;
-				DataBundleRecordTable dataBundleRecordTable = new DataBundleRecordTable("DailyChallengeSchedule");
-				ProceduralWaveSelectionSchema proceduralWaveSelectionSchema = null;
-				foreach (ProceduralWaveSelectionSchema item in dataBundleRecordTable.EnumerateRecords<ProceduralWaveSelectionSchema>())
-				{
-					int num = DynamicEnum.ToIndex(item.startMonth);
-					if (num >= 0)
-					{
-						num++;
-					}
-					int num2 = DynamicEnum.ToIndex(item.endMonth);
-					if (num2 >= 0)
-					{
-						num2++;
-					}
-					if (month >= num && month <= num2 && day >= item.startDay && day <= item.endDay)
-					{
-						proceduralWaveSelectionSchema = item;
-					}
-				}
-				DataBundleRecordTable proceduralWavePool = proceduralWaveSelectionSchema.proceduralWavePool;
-				ProceduralWaveListSchema[] array = proceduralWavePool.InitializeRecords<ProceduralWaveListSchema>();
-				List<ProceduralWaveSchema> list = new List<ProceduralWaveSchema>();
-				ProceduralWaveListSchema[] array2 = array;
-				foreach (ProceduralWaveListSchema proceduralWaveListSchema in array2)
-				{
-					ProceduralWaveSchema proceduralWaveSchema = proceduralWaveListSchema.proceduralWave.InitializeRecord<ProceduralWaveSchema>();
-					if (!proceduralWaveSchema.disabled)
-					{
-						list.Add(proceduralWaveSchema);
-					}
-				}
-				dailyChallengeProceduralWaveSchema = list[dailyChallengeDaysSinceStart % list.Count];
-				RefreshDailyChallengeHero();
-				RefreshDailyChallengeHelpers();
-				RefreshDailyChallengeAbilities();
-				RefreshDailyChallengeEnemies();
-				dailyRandomizer.PopRandomSession(this);
+				num++;
+			}
+			int num2 = DynamicEnum.ToIndex(item.endMonth);
+			if (num2 >= 0)
+			{
+				num2++;
+			}
+			if (month >= num && month <= num2 && day >= item.startDay && day <= item.endDay)
+			{
+				proceduralWaveSelectionSchema = item;
 			}
 		}
-		else
+
+		if (proceduralWaveSelectionSchema == null)
 		{
-			dailyChallengeProceduralWaveSchema = null;
-			dailyChallengeHeroSchema = null;
-			dailyChallengeHelpers.Clear();
-			dailyChallengeHelpers = null;
-			dailyChallengeAbilities.Clear();
-			dailyChallengeAbilities = null;
-			dailyRandomizer = null;
+			Debug.LogWarning("Daily challenge unavailable: no schedule entry matches today's date.");
+			dailyRandomizer.PopRandomSession(this);
+			ClearDailyChallengeData();
+			mRefreshingDailyChallenge = false;
+			return;
 		}
+
+		DataBundleRecordTable proceduralWavePool = proceduralWaveSelectionSchema.proceduralWavePool;
+		ProceduralWaveListSchema[] array = proceduralWavePool.InitializeRecords<ProceduralWaveListSchema>();
+		List<ProceduralWaveSchema> list = new List<ProceduralWaveSchema>();
+		if (array != null)
+		{
+			foreach (ProceduralWaveListSchema proceduralWaveListSchema in array)
+			{
+				if (proceduralWaveListSchema == null ||
+					DataBundleRecordKey.IsNullOrEmpty(proceduralWaveListSchema.proceduralWave))
+				{
+					continue;
+				}
+				ProceduralWaveSchema proceduralWaveSchema = proceduralWaveListSchema.proceduralWave.InitializeRecord<ProceduralWaveSchema>();
+				if (proceduralWaveSchema == null || proceduralWaveSchema.disabled ||
+					DataBundleRecordKey.IsNullOrEmpty(proceduralWaveSchema.wave) ||
+					!HasValidDailyChallengeHeroPool(proceduralWaveSchema))
+				{
+					continue;
+				}
+				WaveSchema challengeWave = WaveSchema.Initialize(proceduralWaveSchema.wave);
+				if (challengeWave == null || challengeWave.Commands == null || challengeWave.Commands.Length == 0 ||
+					string.IsNullOrEmpty(challengeWave.scene))
+				{
+					continue;
+				}
+				list.Add(proceduralWaveSchema);
+			}
+		}
+
+		if (list.Count == 0)
+		{
+			Debug.LogWarning("Daily challenge unavailable: the selected pool contains no enabled challenges with valid wave data.");
+			dailyRandomizer.PopRandomSession(this);
+			ClearDailyChallengeData();
+			mRefreshingDailyChallenge = false;
+			return;
+		}
+
+		dailyChallengeProceduralWaveSchema = list[dailyChallengeDaysSinceStart % list.Count];
+		if (!RefreshDailyChallengeHero())
+		{
+			Debug.LogWarning("Daily challenge unavailable: the selected challenge has no valid active hero.");
+			dailyRandomizer.PopRandomSession(this);
+			ClearDailyChallengeData();
+			mRefreshingDailyChallenge = false;
+			return;
+		}
+		RefreshDailyChallengeHelpers();
+		RefreshDailyChallengeAbilities();
+		RefreshDailyChallengeEnemies();
+		dailyRandomizer.PopRandomSession(this);
 		mRefreshingDailyChallenge = false;
 	}
-
 	public static IEnumerator CheckForUpdates()
 	{
 		SingletonSpawningMonoBehaviour<UpdateSystem>.Instance.DataBundlesModified = false;
@@ -1899,7 +2007,15 @@ public class Profile : Singleton<Profile>
 		IncrementWaveCompletionCount(CurrentStoryWave);
 		CurrentStoryWave++;
 		SetIsWaveUnlocked(CurrentStoryWave, true);
-		CurrentHeroId = WaveManager.GetWaveData(CurrentStoryWave, waveTypeToPlay).recommendedHero.Key;
+		WaveSchema nextWaveData = WaveManager.GetWaveData(CurrentStoryWave, waveTypeToPlay);
+		if (nextWaveData != null && !DataBundleRecordKey.IsNullOrEmpty(nextWaveData.recommendedHero))
+		{
+			CurrentHeroId = nextWaveData.recommendedHero.Key;
+		}
+		else
+		{
+			Debug.LogWarning("Next wave has no valid recommended hero; keeping the current hero selection.");
+		}
 
 		var wavePlayed = Singleton<PlayStatistics>.Instance.data.wavePlayed;
 		if (HasWaveBeenCompleted(wavePlayed))
@@ -2142,9 +2258,13 @@ public class Profile : Singleton<Profile>
 			}
 		}
 		CalcHighestWave();
-		if (highestUnlockedWave == 50 && HasWaveBeenCompleted(50))
+		// The campaign boundary is data-driven. The old hard-coded 50-wave
+		// check became stale when Kaizen changed the authored story length.
+		int finalStoryWave = maxBaseWave;
+		if (finalStoryWave > 0 && highestUnlockedWave == finalStoryWave &&
+			HasWaveBeenCompleted(finalStoryWave))
 		{
-			CurrentStoryWave = 51;
+			CurrentStoryWave = finalStoryWave + 1;
 		}
 		SingletonSpawningMonoBehaviour<GluiPersistentDataCache>.Instance.Save("coins", StringUtils.FormatAmountString(Singleton<Profile>.Instance.coins));
 		SingletonSpawningMonoBehaviour<GluiPersistentDataCache>.Instance.Save("revivePotion", StringUtils.FormatAmountString(Singleton<Profile>.Instance.GetNumPotions("revivePotion")));
