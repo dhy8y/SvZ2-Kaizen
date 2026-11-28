@@ -1,6 +1,6 @@
 # Kaizen project progress
 
-**Snapshot:** 2026-11-26  
+**Snapshot:** 2026-11-28  
 **Feature branch:** `chatgpt/unity-2022-migration`  
 **Pull request:** [#1 — Prepare Unity 2022.3 Android migration](https://github.com/dhy8y/SvZ2-Kaizen/pull/1)  
 **Rough overall completion estimate:** 10% (not a measured metric; the project is still not playable or build-verified).
@@ -148,3 +148,13 @@
 - This does not restore the unsupported reward/present fields; no reward balance/data was changed.
 - Added a source-level assertion for the reward path. CI is pending; not Unity-compiled.
 - Commit: `415d84b` (guard), `7170db1` (test).
+
+
+## 2026-11-28 verification results
+- Final CI on commit `0608c30` passed **15 source-level regression tests** and the static data validator: **0 errors / 16 warnings**, 10 story waves, 188 commands (171 spawns), 13 enemy IDs, 1 active hero. [Run](https://github.com/dhy8y/SvZ2-Kaizen/actions/runs/46139367195)
+- The new assertions cover missing manager guards in helper replacements, extra spawns, bosses, queued spawns, and reward grants. These are source assertions only; no Unity compilation/runtime test.
+- Android CI on commit `0608c30` completed but **skipped** Unity build and APK upload because no `UNITY_LICENSE` is configured. [Run](https://github.com/dhy8y/SvZ2-Kaizen/actions/runs/46139362810)
+- Commits from this follow-up: `627e587`, `559e6d7`, `d8afb24`, `10dbd17`, `9ad5017`, `415d84b`, `7170db1`, `0608c30`.
+- One regression-test attempt failed because the selector chose a nested timer Update method; the selector was anchored to WaveSpawnManager's outer Update, and final CI passed. No gameplay code was rolled back.
+- No campaign/endless content was added; reward collection remains limited to copper coins/pachinko balls, and all other reward fields remain unsupported.
+- Estimated completion remains **10%**. The project still lacks 100-wave data, working endless tables, Unity 2022 import/compile verification, a built APK, and device gameplay testing.
