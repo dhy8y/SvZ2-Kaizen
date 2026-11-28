@@ -99,17 +99,33 @@ public class WaveSpawnManager
 
             if (queueItem.enemy != string.Empty)
             {
-                var enemy = waveManager.ConstructEnemy(queueItem.enemy);
-                if (enemy != null)
+                WaveManager currentWaveManager = waveManager;
+                CharactersManager charactersManager = WeakGlobalInstance<CharactersManager>.Instance;
+                if (currentWaveManager == null)
                 {
-                    WeakGlobalInstance<CharactersManager>.Instance.AddCharacter(enemy);
+                    Debug.LogError("Unable to spawn enemy '" + queueItem.enemy + "': WaveManager is unavailable.");
+                }
+                else if (charactersManager == null)
+                {
+                    // The queued spawn cannot be registered. Reduce the expected count
+                    // so a missing runtime manager does not leave the wave unfinished.
+                    currentWaveManager.totalEnemies = Mathf.Max(0, currentWaveManager.totalEnemies - 1);
+                    Debug.LogError("Unable to spawn enemy '" + queueItem.enemy + "': CharactersManager is unavailable.");
                 }
                 else
                 {
-                    // Keep the wave completable if a data bundle references a missing
-                    // enemy or its prefab cannot be constructed.
-                    waveManager.totalEnemies = Mathf.Max(0, waveManager.totalEnemies - 1);
-                    Debug.LogError("Unable to spawn enemy '" + queueItem.enemy + "'. Check EnemySchema and character resources.");
+                    var enemy = currentWaveManager.ConstructEnemy(queueItem.enemy);
+                    if (enemy != null)
+                    {
+                        charactersManager.AddCharacter(enemy);
+                    }
+                    else
+                    {
+                        // Keep the wave completable if a data bundle references a missing
+                        // enemy or its prefab cannot be constructed.
+                        currentWaveManager.totalEnemies = Mathf.Max(0, currentWaveManager.totalEnemies - 1);
+                        Debug.LogError("Unable to spawn enemy '" + queueItem.enemy + "'. Check EnemySchema and character resources.");
+                    }
                 }
             }
 
