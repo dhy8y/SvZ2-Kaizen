@@ -121,6 +121,15 @@ class WaveManagerSpawnSafetyTests(unittest.TestCase):
         self.assertIn("currentWaveManager == null", body)
         self.assertIn("Mathf.Max(0, currentWaveManager.totalEnemies - 1)", body)
 
+    def test_wave_reward_grant_guards_data_profile_and_manager(self):
+        body = method_body("AddSpecialRewardsToCollectables")
+        self.assertIn("waveRootData == null || waveRootData.Rewards == null", body)
+        self.assertIn("profile == null", body)
+        manager_check = body.index("if (collectableManager == null)")
+        grant = body.index("collectableManager.GiveResource")
+        self.assertLess(manager_check, grant)
+        self.assertIn("Cannot grant wave rewards", body[manager_check:grant])
+
 
 PROFILE_SOURCE = Path(__file__).resolve().parents[1] / "Assets/Scripts/Assembly-CSharp/Profile.cs"
 PROFILE_TEXT = PROFILE_SOURCE.read_text(encoding="utf-8")
