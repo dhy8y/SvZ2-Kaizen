@@ -263,12 +263,21 @@ public class WaveManager : WeakGlobalInstance<WaveManager>
 
 	public void AddSpecialRewardsToCollectables()
 	{
-		if (waveRootData.Rewards == null || !Singleton<Profile>.Instance.GetIsWaveUnlocked(mWaveIndex))
+		Profile profile = Singleton<Profile>.Instance;
+		if (waveRootData == null || waveRootData.Rewards == null || profile == null ||
+			!profile.GetIsWaveUnlocked(mWaveIndex))
 			return;
 
+		CollectableManager collectableManager = WeakGlobalInstance<CollectableManager>.Instance;
+		if (collectableManager == null)
+		{
+			Debug.LogWarning("Cannot grant wave rewards: CollectableManager is unavailable.");
+			return;
+		}
+
 		// [TODO] support all coin types
-		WeakGlobalInstance<CollectableManager>.Instance.GiveResource(ECollectableType.copperCoin, waveRootData.Rewards.coins);
-		WeakGlobalInstance<CollectableManager>.Instance.GiveResource(ECollectableType.pachinkoBall, waveRootData.Rewards.pachinkoBalls);
+		collectableManager.GiveResource(ECollectableType.copperCoin, waveRootData.Rewards.coins);
+		collectableManager.GiveResource(ECollectableType.pachinkoBall, waveRootData.Rewards.pachinkoBalls);
 		// WeakGlobalInstance<CollectableManager>.Instance.GiveSpecificPresent("revivePotion", waveRootData.Rewards.revive);
 		// WeakGlobalInstance<CollectableManager>.Instance.GiveSpecificPresent("power", waveRootData.Rewards.power);
 		// WeakGlobalInstance<CollectableManager>.Instance.GiveSpecificPresent("luck", waveRootData.Rewards.luck);
